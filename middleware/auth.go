@@ -1,9 +1,10 @@
 package middleware
 
-import  (
+import (
+	"fmt"
 	"net/http"
 	"os"
-	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
@@ -17,12 +18,13 @@ func RequireAdmin(c *gin.Context) {
 		c.Abort()
 		return
 	}
+	tokenString = strings.TrimPrefix(tokenString, "Bearer ")
 
 	// Parse token
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		// Check signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("Invalid signing method")
+			return nil, fmt.Errorf("invalid signing method")
 		}
 		return []byte(os.Getenv("JWT_SECRET")), nil
 	})

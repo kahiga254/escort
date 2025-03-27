@@ -11,8 +11,8 @@ func AdminRoutes(route *gin.Engine) {
 	adminGroup := route.Group("/admin").Use(middleware.RequireAdmin)
 
 	{
-		adminGroup.PUT("/approve", admin.ApproveUser)
-		adminGroup.DELETE("/delete", admin.DeleteUser)
+		adminGroup.PUT("/approve/:id", admin.ApproveUser)
+		adminGroup.DELETE("/delete/:id", admin.DeleteUser)
 	}
 
 	

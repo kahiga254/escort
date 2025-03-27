@@ -8,10 +8,8 @@ import (
 	"escort/database"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
-var userCollection *mongo.Collection = database.UserCollection
 
 //Approve user profile
 
@@ -20,7 +18,7 @@ func ApproveUser(c *gin.Context) {
 
 	objID,_ := primitive.ObjectIDFromHex(id)
 
-	_, err := userCollection.UpdateOne(
+	_, err := database.UserCollection.UpdateOne(
 		context.TODO(),
 		bson.M{"_id": objID},
 		 bson.M{"$set": bson.M{"is_active": true}},
@@ -41,7 +39,7 @@ func DeleteUser(c *gin.Context) {
 
 	objID,_ := primitive.ObjectIDFromHex(id)
 
-	_, err := userCollection.DeleteOne(
+	_, err := database.UserCollection.DeleteOne(
 		context.TODO(),
 		bson.M{"_id": objID})
 
