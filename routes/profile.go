@@ -15,5 +15,6 @@ func AdminRoutes(route *gin.Engine) {
 		adminGroup.DELETE("/delete/:id", admin.DeleteUser)
 	}
 
-	
+	//Public route to get all approved users
+
 }
