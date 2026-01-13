@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"escort/database"
 	"escort/models"
 	"os"
+	"strings"
 	"unicode"
 
 	"github.com/dgrijalva/jwt-go"
@@ -133,7 +135,7 @@ func GetAllActiveUsers(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	//simple filter: only get verified and approved users
+	// Simple filter: only get verified and approved users
 	filter := bson.M{
 		"role":      "user",
 		"is_active": true,
@@ -141,13 +143,12 @@ func GetAllActiveUsers(c *gin.Context) {
 
 	location := c.Query("location")
 	if location != "" {
-		filter["location"] = bson.M{"&regex": location, "&options": "i"} //case insensitive search
+		filter["location"] = bson.M{"$regex": location, "$options": "i"} // FIXED: $regex not &regex
 	}
 
-	//find options - only get the fields we need
+	// Find options - only get the fields we need
 	findOptions := options.Find()
-
-	findOptions.SetLimit(50) //limit to 50 results
+	findOptions.SetLimit(50) // Limit to 50 results
 
 	projection := bson.M{
 		"first_name": 1,
@@ -159,45 +160,292 @@ func GetAllActiveUsers(c *gin.Context) {
 	}
 	findOptions.SetProjection(projection)
 
-	//Execute the query
+	// Execute the query
 	cursor, err := database.UserCollection.Find(ctx, filter, findOptions)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to fetch user from database"})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to fetch users from database"})
 		return
 	}
 	defer cursor.Close(ctx)
 
-	//Read results
+	// Read results
 	var results []bson.M
 	if err = cursor.All(ctx, &results); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "Failed to read user data"})
 		return
 	}
 
-	//convert to Minimal User Response
+	// Convert to Minimal User Response
 	var users []models.MinimalUserResponse
 	for _, result := range results {
-
 		// Safely extract fields with type assertions
 		id, _ := result["_id"].(primitive.ObjectID)
 		firstName, _ := result["first_name"].(string)
 		lastName, _ := result["last_name"].(string)
 		phoneNo, _ := result["phone_no"].(string)
 		imageUrl, _ := result["image_url"].(string)
-		services, _ := result["services"].(string)
 		location, _ := result["location"].(string)
+
+		// Handle services - it might be stored as string or array in DB
+		var services []string
+
+		// Try different possible types
+		switch s := result["services"].(type) {
+		case primitive.A: // MongoDB array type
+			for _, v := range s {
+				if str, ok := v.(string); ok {
+					services = append(services, str)
+				}
+			}
+		case string: // Stored as string
+			if s != "" {
+				// If comma-separated
+				services = strings.Split(s, ",")
+				// Trim spaces
+				for i, service := range services {
+					services[i] = strings.TrimSpace(service)
+				}
+			}
+		case []interface{}: // Another array format
+			for _, v := range s {
+				if str, ok := v.(string); ok {
+					services = append(services, str)
+				}
+			}
+		case []string: // Direct string slice (if driver handles it)
+			services = s
+		}
 
 		user := models.MinimalUserResponse{
 			ID:       id,
-			FullName: firstName + "" + lastName,
+			FullName: firstName + " " + lastName, // FIXED: Added space
 			PhoneNo:  phoneNo,
 			ImageUrl: imageUrl,
-			Services: services,
+			Services: services, // Now []string
 			Location: location,
 		}
 		users = append(users, user)
 	}
 
-	//Return successful response with minimal data
-	c.JSON(http.StatusOK, gin.H{"success": true, "count": len(users), "data": users, "message": "Users fetched successfully"})
+	// Return successful response with minimal data
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"count":   len(users),
+		"data":    users,
+		"message": "Users fetched successfully",
+	})
+}
+
+// search users by location or services
+func SearchUsers(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get search query from URL parameter
+	query := c.Query("q")
+	location := c.Query("location")
+	service := c.Query("service")
+
+	// Validate at least one search parameter is provided
+	if query == "" && location == "" && service == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "At least one search parameter (q, location, service) is required"})
+		return
+	}
+
+	// Build filter based on provided parameters
+	filter := bson.M{
+		"role":      "user",
+		"is_active": true,
+	}
+
+	//search conditions
+	var searchConditions []bson.M
+
+	// If query parameter in multiple fileds
+	if query != "" {
+		searchConditions = append(searchConditions, bson.M{
+			"$or": []bson.M{
+				{"location": bson.M{"$regex": primitive.Regex{Pattern: query, Options: "i"}}},
+				{"first_name": bson.M{"$regex": primitive.Regex{Pattern: query, Options: "i"}}},
+				{"last_name": bson.M{"$regex": primitive.Regex{Pattern: query, Options: "i"}}},
+				{"services": bson.M{"$regex": primitive.Regex{Pattern: query, Options: "i"}}},
+			},
+		})
+	}
+
+	// If specific location parameter provided
+	if location != "" {
+		searchConditions = append(searchConditions, bson.M{
+			"location": bson.M{"$regex": primitive.Regex{Pattern: location, Options: "i"}},
+		})
+	}
+
+	// If service parameter provided
+	if service != "" {
+		searchConditions = append(searchConditions, bson.M{
+			"services": bson.M{"$in": []string{service}},
+		})
+	}
+
+	// Combine all search conditions with AND
+	if len(searchConditions) > 0 {
+		filter["$and"] = searchConditions
+	}
+
+	// Get pagination parameters
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	skip := (page - 1) * limit
+
+	// Find options for pagination
+	findOptions := options.Find()
+	findOptions.SetSkip(int64(skip))
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSort(bson.D{{Key: "created_at", Value: -1}}) // Newest first
+
+	// Get total count for pagination
+	totalCount, err := database.UserCollection.CountDocuments(ctx, filter)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to count search results",
+		})
+		return
+	}
+
+	// Execute query
+	cursor, err := database.UserCollection.Find(ctx, filter, findOptions)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to search plumbers",
+		})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	// Read results
+	var users []models.User
+	if err = cursor.All(ctx, &users); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to decode search results",
+		})
+		return
+	}
+
+	//convert to Minimal User Response
+	var results []models.MinimalUserResponse
+	for _, user := range users {
+		minUser := models.MinimalUserResponse{
+			ID:       user.ID,
+			FullName: user.FirstName + " " + user.LastName,
+			PhoneNo:  user.PhoneNo,
+			ImageUrl: user.ImageUrl,
+			Services: user.Services,
+			Location: user.Location,
+		}
+		results = append(results, minUser)
+	}
+
+	//calculate total pages
+	totalPages := 0
+	if totalCount > 0 {
+		totalPages = int((totalCount + int64(limit) - 1) / int64(limit))
+
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    results,
+		"pagination": gin.H{
+			"current_page": page,
+			"per_page":     limit,
+			"total":        totalCount,
+			"total_pages":  totalPages,
+			"has_next":     page < totalPages,
+			"has_prev":     page > 1,
+		},
+		"search_query": gin.H{
+			"q":        query,
+			"location": location,
+			"service":  service,
+		},
+		"message": "Search completed successfully",
+	})
+}
+
+// Get user by specific Location
+func GetUsersByLocation(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	location := c.Param("location")
+	if location == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Location is required",
+		})
+		return
+	}
+
+	// Build filter
+	filter := bson.M{
+		"role":        "user",
+		"is_active":   true,
+		"is_verified": true,
+		"location":    bson.M{"$regex": primitive.Regex{Pattern: location, Options: "i"}},
+	}
+
+	// Get pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	skip := (page - 1) * limit
+
+	findOptions := options.Find()
+	findOptions.SetSkip(int64(skip))
+	findOptions.SetLimit(int64(limit))
+	findOptions.SetSort(bson.D{{Key: "created_at", Value: -1}})
+
+	// Execute query
+	cursor, err := database.UserCollection.Find(ctx, filter, findOptions)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to fetch plumbers by location",
+		})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var users []models.User
+	if err = cursor.All(ctx, &users); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to decode plumbers",
+		})
+		return
+	}
+
+	// Convert to response
+	var results []models.MinimalUserResponse
+	for _, user := range users {
+		minUser := models.MinimalUserResponse{
+			ID:       user.ID,
+			FullName: user.FirstName + " " + user.LastName,
+			PhoneNo:  user.PhoneNo,
+			ImageUrl: user.ImageUrl,
+			Services: user.Services,
+			Location: user.Location,
+		}
+		results = append(results, minUser)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":  true,
+		"data":     users,
+		"location": location,
+		"count":    len(users),
+		"message":  "Plumbers in " + location + " retrieved successfully",
+	})
 }

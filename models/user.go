@@ -24,6 +24,6 @@ type MinimalUserResponse struct {
 	FullName string             `json:"full_name"`
 	PhoneNo  string             `json:"phone_no"`
 	ImageUrl string             `json:"image_url"`
-	Services string             `json:"description"`
+	Services []string           `json:"services"`
 	Location string             `json:"location"` // Optional for homepage
 }
