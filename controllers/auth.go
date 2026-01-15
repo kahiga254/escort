@@ -391,10 +391,9 @@ func GetUsersByLocation(c *gin.Context) {
 
 	// Build filter
 	filter := bson.M{
-		"role":        "user",
-		"is_active":   true,
-		"is_verified": true,
-		"location":    bson.M{"$regex": primitive.Regex{Pattern: location, Options: "i"}},
+		"role":      "user",
+		"is_active": true,
+		"location":  bson.M{"$regex": primitive.Regex{Pattern: location, Options: "i"}},
 	}
 
 	// Get pagination
@@ -412,7 +411,7 @@ func GetUsersByLocation(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   "Failed to fetch plumbers by location",
+			"error":   "Failed to fetch users by location",
 		})
 		return
 	}
@@ -422,7 +421,7 @@ func GetUsersByLocation(c *gin.Context) {
 	if err = cursor.All(ctx, &users); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   "Failed to decode plumbers",
+			"error":   "Failed to decode users",
 		})
 		return
 	}
@@ -446,6 +445,6 @@ func GetUsersByLocation(c *gin.Context) {
 		"data":     users,
 		"location": location,
 		"count":    len(users),
-		"message":  "Plumbers in " + location + " retrieved successfully",
+		"message":  "Users in " + location + " retrieved successfully",
 	})
 }

@@ -10,13 +10,13 @@ func AuthRoutes(route *gin.Engine) {
 
 	// Public routes (no authentication required)
 
-	// GET /plumbers
+	// GET /users
 	route.GET("/users", controllers.GetAllActiveUsers)
 
-	// GET /plumbers/search?q=nairobi
+	// GET /search?q=nairobi
 	route.GET("/search", controllers.SearchUsers)
 
-	// GET /plumbers/location/nairobi
+	// GET /location/nairobi
 	route.GET("location/:location", controllers.GetUsersByLocation)
 
 	auth := route.Group("/auth")
