@@ -26,7 +26,7 @@ func main() {
 	router.Use(gin.Recovery()) // Optional: panic recovery
 
 	//CORS middleware - essntial for frontend-backend communication
-
+	router.Use(CORSMiddleware())
 	// Setup all routes
 	setupRoutes(router)
 
@@ -62,16 +62,34 @@ func setupRoutes(router *gin.Engine) {
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
 
+	// 🔥 ADD OPTIONS HANDLERS FOR CORS PREFLIGHT 🔥
+	router.OPTIONS("/users", handleOptions)
+	router.OPTIONS("/search", handleOptions)
+	router.OPTIONS("/location/:location", handleOptions)
+	router.OPTIONS("/auth/login", handleOptions)
+	router.OPTIONS("/auth/register", handleOptions)
+	router.OPTIONS("/admin/approve/:id", handleOptions)
+	router.OPTIONS("/admin/delete/:id", handleOptions)
+
 	// Setup your existing routes
 	routes.AuthRoutes(router)
 	routes.AdminRoutes(router)
+}
 
-	// If you have profile routes, add them:
-	// routes.ProfileRoutes(router)
+// Handler for OPTIONS requests
+func handleOptions(c *gin.Context) {
+	log.Printf("OPTIONS preflight request for: %s", c.Request.URL.Path)
+
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Origin, X-Requested-With")
+	c.Status(204) // No Content
 }
 
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		log.Printf("CORS Middleware: Request from Origin: %s", c.Request.Header.Get("Origin"))
 
 		allowedOrigins := []string{
 			"http://localhost:3000",
@@ -88,26 +106,29 @@ func CORSMiddleware() gin.HandlerFunc {
 				allowed = true
 				break
 			}
-			// For production, you might want to check against your actual domain
-			if origin != "" && allowed {
-				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-			} else {
-				// For development, you can allow all origins (not recommended for production)
-				c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-			}
-
-			// Required headers
-			c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-			c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-			c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
-
-			// Handle preflight requests
-			if c.Request.Method == "OPTIONS" {
-				c.AbortWithStatus(204)
-				return
-			}
-
-			c.Next()
 		}
+
+		// Set the appropriate origin header
+		if origin != "" && allowed {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			// For development, you can allow all origins
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+
+		// Required headers - ALWAYS SET THESE
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+
+		// Handle preflight requests
+		if c.Request.Method == "OPTIONS" {
+			log.Printf("CORS: Handling OPTIONS preflight request")
+			c.AbortWithStatus(204)
+			return
+		}
+
+		log.Printf("CORS Headers Set: %v", c.Writer.Header())
+		c.Next()
 	}
 }

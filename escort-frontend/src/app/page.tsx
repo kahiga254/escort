@@ -8,16 +8,16 @@ export default function HomePage() {
       <section className="pt-20 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto text-center">
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
-            Find Trusted Service Providers
+            Find Elite Kenyan Escorts Near You
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-8">
-            Connect with verified professionals in your area for all your service needs
+            Connect with nairobi elite escorts in your area, connect with escorts who can make your time in Kenya Truly exceptional.
           </p>
           <div className="max-w-2xl mx-auto">
             <div className="bg-white rounded-full shadow-lg p-2 flex items-center">
               <input
                 type="text"
-                placeholder="Search for plumbers, electricians, carpenters..."
+                placeholder="Search for location, incalls, outcalls..."
                 className="flex-1 px-6 py-3 outline-none text-gray-700 placeholder-gray-400"
               />
               <button className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-8 py-3 rounded-full font-medium hover:opacity-90 transition-opacity">
