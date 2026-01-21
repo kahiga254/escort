@@ -66,8 +66,13 @@ func setupRoutes(router *gin.Engine) {
 	router.OPTIONS("/users", handleOptions)
 	router.OPTIONS("/search", handleOptions)
 	router.OPTIONS("/location/:location", handleOptions)
+	router.OPTIONS("/subscription/plans", handleOptions)
+	router.OPTIONS("/mpesa/callback", handleOptions)
 	router.OPTIONS("/auth/login", handleOptions)
 	router.OPTIONS("/auth/register", handleOptions)
+	router.OPTIONS("/auth/subscribe", handleOptions)
+	router.OPTIONS("/auth/subscription/status", handleOptions)
+	router.OPTIONS("/auth/subscription/check-status", handleOptions)
 	router.OPTIONS("/admin/approve/:id", handleOptions)
 	router.OPTIONS("/admin/delete/:id", handleOptions)
 

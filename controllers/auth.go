@@ -9,6 +9,7 @@ import (
 
 	"escort/database"
 	"escort/models"
+	"escort/services"
 	"os"
 	"strings"
 	"unicode"
@@ -142,7 +143,6 @@ func generateJWT(userID string, role string) string {
 
 // Get all Active Users
 func GetAllActiveUsers(c *gin.Context) {
-
 	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
@@ -150,28 +150,40 @@ func GetAllActiveUsers(c *gin.Context) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Simple filter: only get verified and approved users
+	// NEW LOGIC: Get users who are EITHER:
+	// 1. Admin-approved (is_active: true) OR
+	// 2. Have active subscription (has_subscription: true AND subscription_expiry > now)
 	filter := bson.M{
-		"role":      "user",
-		"is_active": true,
+		"role": "user",
+		"$or": []bson.M{
+			// Option 1: Admin-approved users
+			{"is_active": true},
+			// Option 2: Users with active subscription
+			{
+				"has_subscription":    true,
+				"subscription_expiry": bson.M{"$gt": time.Now()},
+			},
+		},
 	}
 
 	location := c.Query("location")
 	if location != "" {
-		filter["location"] = bson.M{"$regex": location, "$options": "i"} // FIXED: $regex not &regex
+		filter["location"] = bson.M{"$regex": location, "$options": "i"}
 	}
 
-	// Find options - only get the fields we need
+	// Find options - get the fields we need
 	findOptions := options.Find()
-	findOptions.SetLimit(50) // Limit to 50 results
+	findOptions.SetLimit(50)
 
+	// UPDATE: Add has_subscription to projection
 	projection := bson.M{
-		"first_name": 1,
-		"last_name":  1,
-		"phone_no":   1,
-		"image_url":  1,
-		"location":   1,
-		"services":   1,
+		"first_name":       1,
+		"last_name":        1,
+		"phone_no":         1,
+		"image_url":        1,
+		"location":         1,
+		"services":         1,
+		"has_subscription": 1, // ADD THIS
 	}
 	findOptions.SetProjection(projection)
 
@@ -201,48 +213,51 @@ func GetAllActiveUsers(c *gin.Context) {
 		imageUrl, _ := result["image_url"].(string)
 		location, _ := result["location"].(string)
 
-		// Handle services - it might be stored as string or array in DB
-		var services []string
+		// NEW: Get has_subscription field
+		hasSubscription, _ := result["has_subscription"].(bool)
 
-		// Try different possible types
+		// Handle services
+		var services []string
 		switch s := result["services"].(type) {
-		case primitive.A: // MongoDB array type
+		case primitive.A:
 			for _, v := range s {
 				if str, ok := v.(string); ok {
 					services = append(services, str)
 				}
 			}
-		case string: // Stored as string
+		case string:
 			if s != "" {
-				// If comma-separated
 				services = strings.Split(s, ",")
-				// Trim spaces
 				for i, service := range services {
 					services[i] = strings.TrimSpace(service)
 				}
 			}
-		case []interface{}: // Another array format
+		case []interface{}:
 			for _, v := range s {
 				if str, ok := v.(string); ok {
 					services = append(services, str)
 				}
 			}
-		case []string: // Direct string slice (if driver handles it)
+		case []string:
 			services = s
 		}
 
 		user := models.MinimalUserResponse{
-			ID:       id,
-			FullName: firstName + " " + lastName, // FIXED: Added space
-			PhoneNo:  phoneNo,
-			ImageUrl: imageUrl,
-			Services: services, // Now []string
-			Location: location,
+			ID:              id,
+			FullName:        firstName + " " + lastName,
+			PhoneNo:         phoneNo,
+			ImageUrl:        imageUrl,
+			Services:        services,
+			Location:        location,
+			HasSubscription: hasSubscription, // ADD THIS
 		}
 		users = append(users, user)
 	}
 
-	// Return successful response with minimal data
+	// Log for debugging
+	fmt.Printf("✅ Found %d visible users (admin-approved or subscribed)\n", len(users))
+
+	// Return successful response
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"count":   len(users),
@@ -468,5 +483,536 @@ func GetUsersByLocation(c *gin.Context) {
 		"location": location,
 		"count":    len(users),
 		"message":  "Users in " + location + " retrieved successfully",
+	})
+}
+
+// GetSubscriptionPlans - Get all available subscription plans
+func GetSubscriptionPlans(c *gin.Context) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Get only active plans
+	filter := bson.M{"is_active": true}
+	findOptions := options.Find().SetSort(bson.M{"amount": 1}) // Sort by price
+
+	cursor, err := database.SubscriptionPlanCollection.Find(ctx, filter, findOptions)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to fetch subscription plans",
+		})
+		return
+	}
+	defer cursor.Close(ctx)
+
+	var plans []models.SubscriptionPlan
+	if err = cursor.All(ctx, &plans); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to read subscription plans",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    plans,
+		"message": "Subscription plans fetched successfully",
+	})
+}
+
+// Subscribe - Initiate sunscription payment
+func Subscribe(c *gin.Context) {
+	// Get user from context (set by auth middleware)
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Not authenticated",
+		})
+		return
+	}
+
+	var req struct {
+		PlanID string `json:"plan_id" binding:"required"`
+		Phone  string `json:"phone" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// Convert IDs
+	userObjID, err := primitive.ObjectIDFromHex(userID.(string))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid user ID",
+		})
+		return
+	}
+
+	planObjID, err := primitive.ObjectIDFromHex(req.PlanID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid plan ID",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Get plan details
+	var plan models.SubscriptionPlan
+	err = database.SubscriptionPlanCollection.FindOne(ctx, bson.M{"_id": planObjID}).Decode(&plan)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Subscription plan not found",
+		})
+		return
+	}
+
+	// 2. Check if user already has active subscription
+	var existingSubscription models.Subscription
+	err = database.SubscriptionCollection.FindOne(ctx, bson.M{
+		"user_id":     userObjID,
+		"status":      "active",
+		"expiry_date": bson.M{"$gt": time.Now()},
+	}).Decode(&existingSubscription)
+
+	if err == nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "You already have an active subscription",
+			"expires": existingSubscription.ExpiryDate.Format("2006-01-02 15:04:05"),
+		})
+		return
+	}
+
+	// 3. Create subscription record (pending)
+	subscription := models.Subscription{
+		ID:          primitive.NewObjectID(),
+		UserID:      userObjID,
+		PlanID:      planObjID,
+		PhoneUsed:   req.Phone,
+		AmountPaid:  plan.Amount,
+		Status:      "pending",
+		StartDate:   time.Now(),
+		ExpiryDate:  time.Now().Add(time.Duration(plan.DurationDays) * 24 * time.Hour),
+		PaymentDate: time.Now(),
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+
+	// 4. Save subscription to database
+	_, err = database.SubscriptionCollection.InsertOne(ctx, subscription)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to create subscription record",
+		})
+		return
+	}
+
+	// 5. Initiate MPESA payment
+	mpesaService := services.NewMpesaService()
+
+	// Generate account reference
+	accountReference := fmt.Sprintf("SUB-%s", subscription.ID.Hex())
+	transactionDesc := fmt.Sprintf("Subscription: %s", plan.Name)
+
+	mpesaResponse, err := mpesaService.InitiateSTKPush(
+		req.Phone,
+		int(plan.Amount),
+		accountReference,
+		transactionDesc,
+	)
+
+	if err != nil {
+		// Update subscription status to failed
+		database.SubscriptionCollection.UpdateOne(ctx,
+			bson.M{"_id": subscription.ID},
+			bson.M{"$set": bson.M{"status": "failed"}},
+		)
+
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to initiate MPESA payment: " + err.Error(),
+		})
+		return
+	}
+
+	// 6. Extract checkout ID from MPESA response
+	checkoutID, ok := mpesaResponse["CheckoutRequestID"].(string)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Invalid MPESA response",
+		})
+		return
+	}
+
+	// 7. Update subscription with checkout ID
+	_, err = database.SubscriptionCollection.UpdateOne(ctx,
+		bson.M{"_id": subscription.ID},
+		bson.M{"$set": bson.M{
+			"checkout_id": checkoutID,
+			"updated_at":  time.Now(),
+		}},
+	)
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to update subscription with checkout ID",
+		})
+		return
+	}
+
+	// 8. Return success response
+	c.JSON(http.StatusOK, gin.H{
+		"success":             true,
+		"message":             "Check your phone to complete MPESA payment",
+		"subscription_id":     subscription.ID.Hex(),
+		"checkout_id":         checkoutID,
+		"amount":              plan.Amount,
+		"merchant_request_id": mpesaResponse["MerchantRequestID"],
+		"customer_message":    mpesaResponse["CustomerMessage"],
+	})
+}
+
+// GetUserSubscriptionStatus - Get current user's subscription status
+func GetUserSubscriptionStatus(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Not authenticated",
+		})
+		return
+	}
+
+	userObjID, _ := primitive.ObjectIDFromHex(userID.(string))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Find active subscription
+	var subscription models.Subscription
+	err := database.SubscriptionCollection.FindOne(ctx, bson.M{
+		"user_id":     userObjID,
+		"status":      "active",
+		"expiry_date": bson.M{"$gt": time.Now()},
+	}).Decode(&subscription)
+
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success":          true,
+			"has_subscription": false,
+			"message":          "No active subscription found",
+		})
+		return
+	}
+
+	// Get plan details
+	var plan models.SubscriptionPlan
+	database.SubscriptionPlanCollection.FindOne(ctx, bson.M{"_id": subscription.PlanID}).Decode(&plan)
+
+	// Calculate days remaining
+	daysRemaining := int(time.Until(subscription.ExpiryDate).Hours() / 24)
+	if daysRemaining < 0 {
+		daysRemaining = 0
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"has_subscription": true,
+		"subscription":     subscription,
+		"plan":             plan,
+		"days_remaining":   daysRemaining,
+		"is_active":        true,
+		"message":          "Active subscription found",
+	})
+}
+
+// MpesaCallback handles MPESA payment confirmation webhook
+func MpesaCallback(c *gin.Context) {
+	// MPESA sends JSON data in the request body
+	var callbackData map[string]interface{}
+
+	if err := c.ShouldBindJSON(&callbackData); err != nil {
+		fmt.Printf("❌ Invalid callback JSON: %v\n", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ResultCode": 1,
+			"ResultDesc": "Invalid JSON",
+		})
+		return
+	}
+
+	fmt.Printf("📥 MPESA Callback Received:\n")
+	fmt.Printf("   Raw Data: %v\n", callbackData)
+
+	// Extract the callback data
+	body, ok := callbackData["Body"].(map[string]interface{})
+	if !ok {
+		fmt.Println("❌ No Body in callback")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ResultCode": 1,
+			"ResultDesc": "Invalid callback structure",
+		})
+		return
+	}
+
+	stkCallback, ok := body["stkCallback"].(map[string]interface{})
+	if !ok {
+		fmt.Println("❌ No stkCallback in body")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ResultCode": 1,
+			"ResultDesc": "Invalid callback structure",
+		})
+		return
+	}
+
+	// Extract essential fields
+	resultCode, ok := stkCallback["ResultCode"].(float64)
+	if !ok {
+		fmt.Println("❌ No ResultCode in callback")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"ResultCode": 1,
+			"ResultDesc": "Invalid callback structure",
+		})
+		return
+	}
+
+	checkoutRequestID, _ := stkCallback["CheckoutRequestID"].(string)
+	merchantRequestID, _ := stkCallback["MerchantRequestID"].(string)
+
+	fmt.Printf("   CheckoutRequestID: %s\n", checkoutRequestID)
+	fmt.Printf("   MerchantRequestID: %s\n", merchantRequestID)
+	fmt.Printf("   ResultCode: %.0f\n", resultCode)
+
+	// Process based on result code
+	if resultCode == 0 {
+		// Payment successful
+		fmt.Println("✅ Payment Successful!")
+		processSuccessfulPayment(stkCallback)
+	} else {
+		// Payment failed
+		resultDesc, _ := stkCallback["ResultDesc"].(string)
+		fmt.Printf("❌ Payment Failed: %s\n", resultDesc)
+		processFailedPayment(checkoutRequestID, resultDesc)
+	}
+
+	// Always respond success to MPESA (they'll retry if we don't)
+	c.JSON(http.StatusOK, gin.H{
+		"ResultCode": 0,
+		"ResultDesc": "Success",
+	})
+}
+
+// processSuccessfulPayment handles successful MPESA payments
+func processSuccessfulPayment(stkCallback map[string]interface{}) {
+	// Extract metadata
+	callbackMetadata, ok := stkCallback["CallbackMetadata"].(map[string]interface{})
+	if !ok {
+		fmt.Println("❌ No CallbackMetadata in successful payment")
+		return
+	}
+
+	items, ok := callbackMetadata["Item"].([]interface{})
+	if !ok {
+		fmt.Println("❌ No Items in CallbackMetadata")
+		return
+	}
+
+	// Extract payment details
+	var amount float64
+	var mpesaReceiptNumber string
+	var phoneNumber string
+	var transactionDate string
+
+	for _, item := range items {
+		itemMap, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		name, _ := itemMap["Name"].(string)
+		value := itemMap["Value"]
+
+		switch name {
+		case "Amount":
+			if val, ok := value.(float64); ok {
+				amount = val
+			}
+		case "MpesaReceiptNumber":
+			if val, ok := value.(string); ok {
+				mpesaReceiptNumber = val
+			}
+		case "PhoneNumber":
+			if val, ok := value.(string); ok {
+				phoneNumber = val
+			}
+		case "TransactionDate":
+			if val, ok := value.(string); ok {
+				transactionDate = val
+			}
+		}
+	}
+
+	fmt.Printf("💰 Payment Details:\n")
+	fmt.Printf("   Amount: %.2f\n", amount)
+	fmt.Printf("   Receipt: %s\n", mpesaReceiptNumber)
+	fmt.Printf("   Phone: %s\n", phoneNumber)
+	fmt.Printf("   Date: %s\n", transactionDate)
+
+	// Find subscription by checkout ID
+	checkoutRequestID, _ := stkCallback["CheckoutRequestID"].(string)
+	activateSubscription(checkoutRequestID, mpesaReceiptNumber, amount)
+}
+
+// activateSubscription finds and activates the subscription
+func activateSubscription(checkoutID, receiptNumber string, amount float64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// 1. Find the pending subscription by checkout ID
+	var subscription models.Subscription
+	err := database.SubscriptionCollection.FindOne(ctx,
+		bson.M{"checkout_id": checkoutID},
+	).Decode(&subscription)
+
+	if err != nil {
+		fmt.Printf("❌ Subscription not found for checkout ID: %s\n", checkoutID)
+		return
+	}
+
+	fmt.Printf("📋 Found subscription: %s\n", subscription.ID.Hex())
+
+	// 2. Update subscription to active
+	_, err = database.SubscriptionCollection.UpdateOne(ctx,
+		bson.M{"_id": subscription.ID},
+		bson.M{"$set": bson.M{
+			"status":        "active",
+			"mpesa_receipt": receiptNumber,
+			"amount_paid":   amount,
+			"payment_date":  time.Now(),
+			"updated_at":    time.Now(),
+		}},
+	)
+
+	if err != nil {
+		fmt.Printf("❌ Failed to update subscription: %v\n", err)
+		return
+	}
+
+	fmt.Printf("✅ Subscription activated: %s\n", subscription.ID.Hex())
+
+	// 3. Update user's subscription status
+	_, err = database.UserCollection.UpdateOne(ctx,
+		bson.M{"_id": subscription.UserID},
+		bson.M{"$set": bson.M{
+			"has_subscription":    true,
+			"subscription_expiry": subscription.ExpiryDate,
+			"last_payment_date":   time.Now(),
+		}},
+	)
+
+	if err != nil {
+		fmt.Printf("❌ Failed to update user: %v\n", err)
+		return
+	}
+
+	// 4. Get user details for logging
+	var user models.User
+	database.UserCollection.FindOne(ctx, bson.M{"_id": subscription.UserID}).Decode(&user)
+
+	fmt.Printf("🎉 User %s (%s) now has active subscription!\n",
+		user.FirstName+" "+user.LastName,
+		user.PhoneNo)
+
+	// 5. Send notification (optional - implement later)
+	// sendSubscriptionActivationNotification(user.PhoneNo, user.Email)
+}
+
+// processFailedPayment handles failed MPESA payments
+func processFailedPayment(checkoutID, failureReason string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Update subscription status to failed
+	_, err := database.SubscriptionCollection.UpdateOne(ctx,
+		bson.M{"checkout_id": checkoutID},
+		bson.M{"$set": bson.M{
+			"status":         "failed",
+			"failure_reason": failureReason,
+			"updated_at":     time.Now(),
+		}},
+	)
+
+	if err != nil {
+		fmt.Printf("❌ Failed to update subscription status: %v\n", err)
+	} else {
+		fmt.Printf("📝 Subscription marked as failed: %s\n", checkoutID)
+	}
+}
+
+// CheckSubscriptionStatus allows users to check payment status
+func CheckSubscriptionStatus(c *gin.Context) {
+	userID, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"success": false,
+			"error":   "Not authenticated",
+		})
+		return
+	}
+
+	checkoutID := c.Query("checkout_id")
+	if checkoutID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Checkout ID is required",
+		})
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Find subscription
+	var subscription models.Subscription
+	err := database.SubscriptionCollection.FindOne(ctx,
+		bson.M{"checkout_id": checkoutID},
+	).Decode(&subscription)
+
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Subscription not found",
+		})
+		return
+	}
+
+	// Verify user owns this subscription
+	userObjID, _ := primitive.ObjectIDFromHex(userID.(string))
+	if subscription.UserID != userObjID {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"error":   "Access denied",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"status":  subscription.Status,
+		"data":    subscription,
 	})
 }
