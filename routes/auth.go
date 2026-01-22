@@ -1,9 +1,14 @@
 package routes
 
 import (
+	"context"
 	"escort/controllers"
+	"escort/database"
+	"escort/middleware"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func AuthRoutes(route *gin.Engine) {
@@ -31,15 +36,42 @@ func AuthRoutes(route *gin.Engine) {
 		auth.POST("/login", controllers.LoginUser)
 		auth.POST("/register", controllers.RegisterUser)
 
-		// ====== SUBSCRIPTION ROUTES ======
+		auth.GET("/debug/subscriptions", func(c *gin.Context) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
 
+			// Get all subscriptions
+			cursor, err := database.SubscriptionCollection.Find(ctx, bson.M{})
+			if err != nil {
+				c.JSON(500, gin.H{"error": "Failed to query: " + err.Error()})
+				return
+			}
+			defer cursor.Close(ctx)
+
+			var results []map[string]interface{}
+			for cursor.Next(ctx) {
+				var sub map[string]interface{}
+				if err := cursor.Decode(&sub); err != nil {
+					continue
+				}
+				results = append(results, sub)
+			}
+
+			c.JSON(200, gin.H{
+				"count":         len(results),
+				"subscriptions": results,
+			})
+		})
+
+		// ====== SUBSCRIPTION ROUTES ======
+		protected := auth.Group("").Use(middleware.RequireAuth())
 		// 1. subscribe - Initiate MPESA payment
-		auth.POST("/subscribe", controllers.Subscribe)
+		protected.POST("/subscribe", controllers.Subscribe)
 
 		//2. Check User's subscription status
-		auth.GET("/subscription/check-status", controllers.CheckSubscriptionStatus)
+		protected.GET("/subscription/check-status", controllers.CheckSubscriptionStatus)
 
 		//3. Check user's current subscription status
-		auth.GET("/subscription/status", controllers.GetUserSubscriptionStatus)
+		protected.GET("/subscription/status", controllers.GetUserSubscriptionStatus)
 	}
 }

@@ -8,7 +8,7 @@ import (
 )
 
 func AdminRoutes(route *gin.Engine) {
-	adminGroup := route.Group("/admin").Use(middleware.RequireAdmin)
+	adminGroup := route.Group("/admin").Use(middleware.RequireAdmin())
 
 	{
 		adminGroup.PUT("/approve/:id", admin.ApproveUser)

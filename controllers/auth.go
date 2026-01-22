@@ -488,6 +488,10 @@ func GetUsersByLocation(c *gin.Context) {
 
 // GetSubscriptionPlans - Get all available subscription plans
 func GetSubscriptionPlans(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -523,6 +527,12 @@ func GetSubscriptionPlans(c *gin.Context) {
 
 // Subscribe - Initiate sunscription payment
 func Subscribe(c *gin.Context) {
+	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	// Get user from context (set by auth middleware)
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -535,7 +545,7 @@ func Subscribe(c *gin.Context) {
 
 	var req struct {
 		PlanID string `json:"plan_id" binding:"required"`
-		Phone  string `json:"phone" binding:"required"`
+		Phone  string `json:"phone,omitempty"` // Make optional
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -565,9 +575,6 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
 	// 1. Get plan details
 	var plan models.SubscriptionPlan
 	err = database.SubscriptionPlanCollection.FindOne(ctx, bson.M{"_id": planObjID}).Decode(&plan)
@@ -578,6 +585,16 @@ func Subscribe(c *gin.Context) {
 		})
 		return
 	}
+
+	// ⭐⭐ ADD THESE LINES RIGHT AFTER THE ABOVE CODE ⭐⭐
+	fmt.Println("=== DEBUG: BEFORE OVERRIDE ===")
+	fmt.Printf("Plan Name: %s\n", plan.Name)
+	fmt.Printf("Original Amount: %.0f KSH\n", plan.Amount)
+
+	// FORCE AMOUNT TO 10 KSH FOR TESTING
+	plan.Amount = 10
+	fmt.Printf("✅ OVERRIDDEN Amount: %.0f KSH\n", plan.Amount)
+	fmt.Println("=== DEBUG: AFTER OVERRIDE ===")
 
 	// 2. Check if user already has active subscription
 	var existingSubscription models.Subscription
@@ -596,12 +613,40 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	// 3. Create subscription record (pending)
+	// 3. DETERMINE PHONE NUMBER TO USE
+	phoneToUse := ""
+
+	// Priority 1: Use phone from request (if provided)
+	if req.Phone != "" {
+		phoneToUse = req.Phone
+		fmt.Printf("📱 Using phone from request: %s\n", phoneToUse)
+	} else {
+		// Priority 2: Use phone from .env file
+		phoneToUse = os.Getenv("MY_TEST_PHONE")
+		if phoneToUse == "" {
+			// Priority 3: Use default test phone
+			phoneToUse = "254708374149" // MPESA sandbox test phone
+			fmt.Println("📱 Using default sandbox test phone")
+		} else {
+			fmt.Printf("📱 Using phone from .env: %s\n", phoneToUse)
+		}
+	}
+
+	// Validate phone number
+	if phoneToUse == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Phone number is required. Either provide it in the request or set MY_TEST_PHONE in .env",
+		})
+		return
+	}
+
+	// 4. Create subscription record (pending)
 	subscription := models.Subscription{
 		ID:          primitive.NewObjectID(),
 		UserID:      userObjID,
 		PlanID:      planObjID,
-		PhoneUsed:   req.Phone,
+		PhoneUsed:   phoneToUse,
 		AmountPaid:  plan.Amount,
 		Status:      "pending",
 		StartDate:   time.Now(),
@@ -611,7 +656,7 @@ func Subscribe(c *gin.Context) {
 		UpdatedAt:   time.Now(),
 	}
 
-	// 4. Save subscription to database
+	// 5. Save subscription to database
 	_, err = database.SubscriptionCollection.InsertOne(ctx, subscription)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -621,15 +666,17 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	// 5. Initiate MPESA payment
+	// 6. Initiate MPESA payment
 	mpesaService := services.NewMpesaService()
 
 	// Generate account reference
 	accountReference := fmt.Sprintf("SUB-%s", subscription.ID.Hex())
 	transactionDesc := fmt.Sprintf("Subscription: %s", plan.Name)
 
+	fmt.Printf("🚀 Initiating payment to: %s for KSH %.0f\n", phoneToUse, plan.Amount)
+
 	mpesaResponse, err := mpesaService.InitiateSTKPush(
-		req.Phone,
+		phoneToUse,
 		int(plan.Amount),
 		accountReference,
 		transactionDesc,
@@ -649,7 +696,7 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	// 6. Extract checkout ID from MPESA response
+	// 7. Extract checkout ID from MPESA response
 	checkoutID, ok := mpesaResponse["CheckoutRequestID"].(string)
 	if !ok {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -659,7 +706,7 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	// 7. Update subscription with checkout ID
+	// 8. Update subscription with checkout ID
 	_, err = database.SubscriptionCollection.UpdateOne(ctx,
 		bson.M{"_id": subscription.ID},
 		bson.M{"$set": bson.M{
@@ -676,16 +723,25 @@ func Subscribe(c *gin.Context) {
 		return
 	}
 
-	// 8. Return success response
+	// 9. Return success response
 	c.JSON(http.StatusOK, gin.H{
 		"success":             true,
-		"message":             "Check your phone to complete MPESA payment",
+		"message":             fmt.Sprintf("Payment initiated to %s. Check your phone to complete MPESA payment", maskPhone(phoneToUse)),
 		"subscription_id":     subscription.ID.Hex(),
 		"checkout_id":         checkoutID,
 		"amount":              plan.Amount,
+		"phone_used":          maskPhone(phoneToUse), // Mask for security
 		"merchant_request_id": mpesaResponse["MerchantRequestID"],
 		"customer_message":    mpesaResponse["CustomerMessage"],
 	})
+}
+
+// Helper function to mask phone number
+func maskPhone(phone string) string {
+	if len(phone) < 6 {
+		return phone
+	}
+	return phone[:3] + "****" + phone[len(phone)-3:]
 }
 
 // GetUserSubscriptionStatus - Get current user's subscription status

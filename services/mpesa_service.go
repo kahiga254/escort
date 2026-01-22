@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -39,6 +40,21 @@ func NewMpesaService() *MpesaService {
 // GetAccessToken obtains an OAuth token from MPESA
 // This token is required for all API calls and expires after 1 hour
 func (m *MpesaService) GetAccessToken() (string, error) {
+
+	callbackURL := os.Getenv("MPESA_CALLBACK_URL")
+	fmt.Printf("🔧 DEBUG - Raw callback URL from env: '%s'\n", callbackURL)
+	fmt.Printf("🔧 DEBUG - Callback URL length: %d\n", len(callbackURL))
+
+	// Check if it contains the variable name
+	if strings.Contains(callbackURL, "MPESA_CALLBACK_URL=") {
+		fmt.Println("❌ ERROR: Callback URL contains variable name!")
+		// Try to extract just the URL
+		parts := strings.Split(callbackURL, "=")
+		if len(parts) > 1 {
+			callbackURL = parts[len(parts)-1]
+			fmt.Printf("🔧 DEBUG - Extracted callback URL: '%s'\n", callbackURL)
+		}
+	}
 	// Check if we have a valid cached token
 	if time.Now().Before(m.tokenExpiry) && m.accessToken != "" {
 		return m.accessToken, nil
@@ -121,6 +137,16 @@ func (m *MpesaService) InitiateSTKPush(
 	transactionDesc string,
 ) (map[string]interface{}, error) {
 
+	fmt.Println("=== MPESA CONFIGURATION DEBUG ===")
+	fmt.Printf("Consumer Key exists: %v\n", m.consumerKey != "")
+	fmt.Printf("Consumer Secret exists: %v\n", m.consumerSecret != "")
+	fmt.Printf("ShortCode: %s\n", m.shortCode)
+	fmt.Printf("PassKey exists: %v\n", m.passKey != "")
+	fmt.Printf("Callback URL: %s\n", m.callbackURL)
+	fmt.Printf("Environment: %s\n", m.environment)
+	fmt.Printf("Amount being sent: %d\n", amount)
+	fmt.Println("================================")
+
 	fmt.Printf("🚀 Initiating MPESA Payment:\n")
 	fmt.Printf("   📱 Phone: %s\n", phoneNumber)
 	fmt.Printf("   💰 Amount: %d\n", amount)
@@ -189,18 +215,37 @@ func (m *MpesaService) InitiateSTKPush(
 	}
 	defer resp.Body.Close()
 
-	// 11. Parse response
+	// ⭐⭐ FIXED SECTION - ADD DEBUG LOGGING ⭐⭐
+	fmt.Printf("📡 MPESA Response Status Code: %d\n", resp.StatusCode)
+
+	// Read the response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+	bodyString := string(bodyBytes)
+	fmt.Printf("📡 MPESA Response Body: %s\n", bodyString)
+
+	// Parse response from the bytes we just read
 	var response map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %v", err)
+	if err := json.Unmarshal(bodyBytes, &response); err != nil {
+		fmt.Printf("❌ Failed to parse JSON: %v\n", err)
+		return nil, fmt.Errorf("invalid JSON response from MPESA: %v", err)
 	}
 
 	// 12. Check for errors
 	if resp.StatusCode != 200 {
 		errorDesc, _ := response["errorMessage"].(string)
+		errorCode, _ := response["errorCode"].(string)
 		requestID, _ := response["requestId"].(string)
-		return nil, fmt.Errorf("MPESA API error (Status %d): %s (RequestID: %s)",
-			resp.StatusCode, errorDesc, requestID)
+
+		fmt.Printf("❌ MPESA API Error Details:\n")
+		fmt.Printf("   Error Code: %s\n", errorCode)
+		fmt.Printf("   Error Message: %s\n", errorDesc)
+		fmt.Printf("   Request ID: %s\n", requestID)
+
+		return nil, fmt.Errorf("MPESA API error %s (Status %d): %s",
+			errorCode, resp.StatusCode, errorDesc)
 	}
 
 	// 13. Check response code

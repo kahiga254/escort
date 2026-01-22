@@ -35,9 +35,11 @@ func ConnectDB() {
 		log.Fatal("❌ MONGO_URI is not set in the environment!")
 	}
 
-	Client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(MONGO_URI))
-	if err != nil {
-		log.Fatal("Error connecting to MongoDB:", err)
+	// FIX: Use = instead of := to assign to global Client
+	var connectErr error
+	Client, connectErr = mongo.Connect(context.TODO(), options.Client().ApplyURI(MONGO_URI))
+	if connectErr != nil {
+		log.Fatal("Error connecting to MongoDB:", connectErr)
 	}
 
 	err = Client.Ping(ctx, nil)
@@ -59,7 +61,7 @@ func ConnectDB() {
 	// Create indexes for subscriptions
 	createSubscriptionIndexes()
 
-	// Initialize default subscription plans
+	// Initialize default plans (with amount 10)
 	initializeDefaultPlans()
 
 	fmt.Println("✅ All collections successfully initialized!")
@@ -104,7 +106,7 @@ func initializeDefaultPlans() {
 	plans := []interface{}{
 		map[string]interface{}{
 			"name":          "5-Day Basic",
-			"amount":        500,
+			"amount":        10,
 			"duration_days": 5,
 			"description":   "Basic visibility for 5 days",
 			"is_active":     true,
