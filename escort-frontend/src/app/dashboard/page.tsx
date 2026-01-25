@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface User {
   id: string;
@@ -346,14 +347,14 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   
-                  {!user.isActive && (
-                    <button
-                      onClick={handleActivateAccount}
-                      className="w-full mt-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg hover:from-red-700 hover:to-orange-700 transition-all"
-                    >
-                      Activate Now
-                    </button>
-                  )}
+                  // Replace the current activation button with:
+{!user.isActive && (
+  <Link href="/activate">
+    <button className="w-full mt-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg hover:from-red-700 hover:to-orange-700 transition-all">
+      Activate Now
+    </button>
+  </Link>
+)}
                 </div>
               </div>
             </div>
