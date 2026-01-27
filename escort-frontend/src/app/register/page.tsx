@@ -4,6 +4,21 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
+const serviceOptions = [
+  'Three some',
+  'Incalls',
+  'Outcalls',
+  'Blow job',
+  'Anal',
+  'Erotic Massage',
+  'Deep Throats',
+  'Cum on Body',
+  'GFE',
+  'PSE',
+  'BDSM',
+  'Role Play'
+];
+
 export default function RegisterPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -22,6 +37,8 @@ export default function RegisterPage() {
     nationality: '',
     location: '',
   });
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
+  const [customService, setCustomService] = useState('');
 
   const genderOptions = ['Male', 'Female', 'Non-binary', 'Other'];
   const orientationOptions = ['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Asexual'];
@@ -34,6 +51,32 @@ export default function RegisterPage() {
     setSuccess('');
   };
 
+  const toggleService = (service: string) => {
+    setSelectedServices(prev => 
+      prev.includes(service) 
+        ? prev.filter(s => s !== service)
+        : [...prev, service]
+    );
+  };
+
+  const handleCustomServiceAdd = () => {
+    if (customService.trim() && !selectedServices.includes(customService.trim())) {
+      setSelectedServices(prev => [...prev, customService.trim()]);
+      setCustomService('');
+    }
+  };
+
+  const handleCustomServiceKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleCustomServiceAdd();
+    }
+  };
+
+  const removeService = (service: string) => {
+    setSelectedServices(prev => prev.filter(s => s !== service));
+  };
+
   const validateForm = (): string | null => {
     // Required fields
     const requiredFields = ['firstName', 'lastName', 'email', 'phoneNo', 'password', 'confirmPassword', 'gender'];
@@ -41,6 +84,11 @@ export default function RegisterPage() {
       if (!formData[field as keyof typeof formData]?.trim()) {
         return `${field.replace(/([A-Z])/g, ' $1').toLowerCase()} is required`;
       }
+    }
+
+    // Service selection validation
+    if (selectedServices.length === 0) {
+      return 'Please select at least one service you offer';
     }
 
     // Email validation
@@ -125,6 +173,7 @@ export default function RegisterPage() {
           age: formData.age ? parseInt(formData.age) : 25,
           nationality: formData.nationality || 'Kenyan',
           location: formData.location || 'Nairobi',
+          services: selectedServices, // Add services to the registration data
         }),
       });
 
@@ -148,6 +197,7 @@ export default function RegisterPage() {
           nationality: '',
           location: '',
         });
+        setSelectedServices([]);
 
         // Optionally redirect to login after 3 seconds
         setTimeout(() => {
@@ -376,6 +426,100 @@ export default function RegisterPage() {
               </div>
             </div>
 
+           {/* Services Section - NEW */}
+<div>
+  <h2 className="text-xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
+    Services Offered *
+  </h2>
+  
+  <div className="mb-6">
+    <p className="text-sm text-gray-600 mb-4">
+      Select all services you offer. You can add or remove services later from your dashboard.
+    </p>
+    
+    {/* Selected Services Preview */}
+    {selectedServices.length > 0 && (
+      <div className="mb-6">
+        <h3 className="text-sm font-medium text-gray-900 mb-3">Selected Services ({selectedServices.length})</h3>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {selectedServices.map(service => (
+            <div
+              key={service}
+              className="inline-flex items-center gap-2 bg-purple-100 text-purple-800 px-3 py-1.5 rounded-full text-sm"
+            >
+              <span>{service}</span>
+              <button
+                type="button"
+                onClick={() => removeService(service)}
+                className="text-purple-600 hover:text-purple-800 focus:outline-none"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    {/* Service Selection Grid - FIXED TEXT COLOR */}
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+      {serviceOptions.map(service => (
+        <button
+          type="button"
+          key={service}
+          onClick={() => toggleService(service)}
+          className={`p-3 rounded-lg border-2 transition-all duration-200 text-black ${
+            selectedServices.includes(service)
+              ? 'border-purple-500 bg-purple-50 text-purple-800' // Changed to purple-800 for better contrast
+              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-900' // Changed to gray-900 (almost black)
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-medium">{service}</span>
+            {selectedServices.includes(service) ? (
+              <svg className="w-5 h-5 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <div className="w-5 h-5 border-2 border-gray-400 rounded"></div> // Changed to gray-400
+            )}
+          </div>
+        </button>
+      ))}
+    </div>
+
+    {/* Custom Service Input */}
+    <div className="mb-2">
+      <label htmlFor="customService" className="block text-sm font-medium text-gray-900 mb-2">
+        Add Custom Service
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="customService"
+          type="text"
+          value={customService}
+          onChange={(e) => setCustomService(e.target.value)}
+          onKeyDown={handleCustomServiceKeyDown}
+          className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none text-gray-900"
+          placeholder="Type a service not listed above"
+        />
+        <button
+          type="button"
+          onClick={handleCustomServiceAdd}
+          className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+        >
+          Add
+        </button>
+      </div>
+      <p className="text-xs text-gray-500 mt-2">
+        {selectedServices.length} service{selectedServices.length !== 1 ? 's' : ''} selected
+      </p>
+    </div>
+  </div>
+</div>
+
             {/* Account Security Section */}
             <div>
               <h2 className="text-xl font-bold text-gray-900 mb-6 pb-2 border-b border-gray-200">
@@ -443,8 +587,10 @@ export default function RegisterPage() {
             <div className="pt-6 border-t border-gray-200">
               <button
                 type="submit"
-                disabled={loading}
-                className="w-full flex justify-center py-4 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300"
+                disabled={loading || selectedServices.length === 0}
+                className={`w-full flex justify-center py-4 px-4 border border-transparent rounded-lg shadow-sm text-lg font-medium text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500 transition-all duration-300 ${
+                  selectedServices.length === 0 ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               >
                 {loading ? (
                   <>

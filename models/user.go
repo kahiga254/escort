@@ -7,20 +7,29 @@ import (
 )
 
 type User struct {
-	ID                 primitive.ObjectID `bson:"_id,omitempty" json:"id"`
-	FirstName          string             `bson:"first_name" json:"first_name" binding:"required"`
-	LastName           string             `bson:"last_name" json:"last_name" binding:"required"`
-	PhoneNo            string             `bson:"phone_no" json:"phone_no" binding:"required"`
-	Email              string             `bson:"email" json:"email" binding:"required,email"`
-	Password           string             `bson:"password" json:"password" binding:"required"`
-	Location           string             `bson:"location" json:"location" binding:"required"`
-	Services           []string           `bson:"services" json:"services"`
-	ImageUrl           string             `bson:"image_url" json:"image_url"`
-	IsActive           bool               `bson:"is_active" json:"is_active"`
-	Role               string             `bson:"role" json:"role"` // "user" or "admin"
-	HasSubscription    bool               `bson:"has_subscription" json:"has_subscription"`
-	SubscriptionExpiry time.Time          `bson:"subscription_expiry,omitempty" json:"subscription_expiry,omitempty"`
-	LastPaymentDate    time.Time          `bson:"last_payment_date,omitempty" json:"last_payment_date,omitempty"`
+	ID        primitive.ObjectID `bson:"_id,omitempty" json:"id"`
+	FirstName string             `bson:"first_name" json:"first_name" binding:"required"`
+	LastName  string             `bson:"last_name" json:"last_name" binding:"required"`
+	PhoneNo   string             `bson:"phone_no" json:"phone_no" binding:"required"`
+	Email     string             `bson:"email" json:"email" binding:"required,email"`
+	Password  string             `bson:"password" json:"password" binding:"required"`
+	Location  string             `bson:"location" json:"location" binding:"required"`
+
+	// ADD THESE NEW FIELDS:
+	Gender            string `bson:"gender" json:"gender" binding:"required"`
+	SexualOrientation string `bson:"sexual_orientation" json:"sexual_orientation,omitempty"`
+	Age               int    `bson:"age" json:"age,omitempty"`
+	Nationality       string `bson:"nationality" json:"nationality,omitempty"`
+
+	Services           []string  `bson:"services" json:"services"`
+	ImageUrl           string    `bson:"image_url" json:"image_url"`
+	IsActive           bool      `bson:"is_active" json:"is_active"`
+	Role               string    `bson:"role" json:"role"` // "user" or "admin"
+	HasSubscription    bool      `bson:"has_subscription" json:"has_subscription"`
+	SubscriptionExpiry time.Time `bson:"subscription_expiry,omitempty" json:"subscription_expiry,omitempty"`
+	LastPaymentDate    time.Time `bson:"last_payment_date,omitempty" json:"last_payment_date,omitempty"`
+	CreatedAt          time.Time `bson:"created_at" json:"created_at,omitempty"`
+	UpdatedAt          time.Time `bson:"updated_at" json:"updated_at,omitempty"`
 }
 
 // MinimalPUserResponse - Only fields needed for homepage

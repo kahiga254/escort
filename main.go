@@ -25,8 +25,12 @@ func main() {
 	router.Use(gin.Logger())   // Optional: request logging
 	router.Use(gin.Recovery()) // Optional: panic recovery
 
-	//CORS middleware - essntial for frontend-backend communication
+	// CORS middleware - essential for frontend-backend communication
 	router.Use(CORSMiddleware())
+
+	// 🔥🔥🔥 ADD THIS LINE: Serve static files from uploads directory 🔥🔥🔥
+	router.Static("/uploads", "./uploads")
+
 	// Setup all routes
 	setupRoutes(router)
 
@@ -40,6 +44,8 @@ func main() {
 	log.Printf("📝 API Endpoints:")
 	log.Printf("   POST   http://localhost:%s/auth/register", port)
 	log.Printf("   POST   http://localhost:%s/auth/login", port)
+	log.Printf("   POST   http://localhost:%s/auth/upload-images", port)
+	log.Printf("   PUT    http://localhost:%s/auth/update-profile", port)
 	log.Printf("   PUT    http://localhost:%s/admin/approve/:id", port)
 	log.Printf("   DELETE http://localhost:%s/admin/delete/:id", port)
 
@@ -73,6 +79,8 @@ func setupRoutes(router *gin.Engine) {
 	router.OPTIONS("/auth/subscribe", handleOptions)
 	router.OPTIONS("/auth/subscription/status", handleOptions)
 	router.OPTIONS("/auth/subscription/check-status", handleOptions)
+	router.OPTIONS("/auth/upload-images", handleOptions)
+	router.OPTIONS("/auth/update-profile", handleOptions)
 	router.OPTIONS("/admin/approve/:id", handleOptions)
 	router.OPTIONS("/admin/delete/:id", handleOptions)
 

@@ -43,52 +43,94 @@ func isValidPassword(password string) bool {
 }
 
 func RegisterUser(c *gin.Context) {
-	// Add these 3 lines to ALL FIVE functions:
 	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
 	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 
-	var user models.User
+	// Create a registration DTO that matches frontend
+	type RegisterRequest struct {
+		FirstName         string `json:"firstName" binding:"required"`
+		LastName          string `json:"lastName" binding:"required"`
+		Email             string `json:"email" binding:"required,email"`
+		PhoneNo           string `json:"phoneNo" binding:"required"`
+		Password          string `json:"password" binding:"required"`
+		Gender            string `json:"gender" binding:"required"`
+		SexualOrientation string `json:"sexualOrientation"`
+		Age               int    `json:"age"`
+		Nationality       string `json:"nationality"`
+		Location          string `json:"location" binding:"required"`
+	}
 
-	// Bind JSON input and validate required fields
-	if err := c.BindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing required fields"})
+	var req RegisterRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Invalid request: " + err.Error(),
+		})
 		return
 	}
 
-	//validate password strength
-	if !isValidPassword(user.Password) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters, with one uppercase letter and one special character"})
-		return
-	}
-
-	//Check if user exists
+	// Check if user exists
 	var existingUser models.User
-	err := database.UserCollection.FindOne(context.TODO(), bson.M{"email": user.Email}).Decode(&existingUser)
+	err := database.UserCollection.FindOne(context.TODO(), bson.M{"email": req.Email}).Decode(&existingUser)
 	if err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "User already exists"})
+		c.JSON(http.StatusConflict, gin.H{
+			"success": false,
+			"error":   "User already exists",
+		})
 		return
 	}
 
-	//Hash password
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(user.Password), 14)
-	user.Password = string(hashedPassword)
+	// Validate password
+	if !isValidPassword(req.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Password must be at least 6 characters, with one uppercase letter and one special character",
+		})
+		return
+	}
 
-	//set default values
-	user.ID = primitive.NewObjectID()
-	user.IsActive = false
-	user.Role = "user"
+	// Hash password
+	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(req.Password), 14)
 
-	fmt.Printf("User: %v\n", user)
+	// Create user from request
+	user := models.User{
+		ID:                 primitive.NewObjectID(),
+		FirstName:          req.FirstName,
+		LastName:           req.LastName,
+		Email:              req.Email,
+		PhoneNo:            req.PhoneNo,
+		Password:           string(hashedPassword),
+		Location:           req.Location,
+		IsActive:           false,
+		Role:               "user",
+		HasSubscription:    false,
+		SubscriptionExpiry: time.Time{},
+		LastPaymentDate:    time.Time{},
+		// Store additional fields in a map or separate collection if needed
+	}
 
 	_, err = database.UserCollection.InsertOne(context.TODO(), user)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register", "details": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to register user",
+		})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"message": "user registered, pending approval"})
-
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "User registered successfully. Account pending admin approval.",
+		"user": gin.H{
+			"id":        user.ID.Hex(),
+			"firstName": user.FirstName,
+			"lastName":  user.LastName,
+			"email":     user.Email,
+			"role":      user.Role,
+			"isActive":  user.IsActive,
+		},
+	})
 }
 
 func LoginUser(c *gin.Context) {
