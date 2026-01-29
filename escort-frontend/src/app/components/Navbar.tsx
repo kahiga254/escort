@@ -1,110 +1,269 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname, useRouter } from 'next/navigation';
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Check if user is logged in on component mount and when pathname changes
+  useEffect(() => {
+    checkAuthStatus();
+  }, [pathname]);
+
+  const checkAuthStatus = () => {
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    
+    if (token && userData) {
+      setIsLoggedIn(true);
+      setUser(JSON.parse(userData));
+    } else {
+      setIsLoggedIn(false);
+      setUser(null);
+    }
+    setLoading(false);
+  };
+
+  const handleLogout = () => {
+    // Clear local storage
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    
+    // Update state
+    setIsLoggedIn(false);
+    setUser(null);
+    
+    // Close mobile menu if open
+    setIsMenuOpen(false);
+    
+    // Redirect to home page
+    router.push('/');
+  };
+
+  if (loading) {
+    return (
+      <nav className="bg-white shadow-lg sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-20">
+            {/* Logo skeleton */}
+            <div className="flex items-center">
+              <div className="relative w-48 h-16 md:w-56 md:h-20 lg:w-64 lg:h-24 animate-pulse bg-gray-200 rounded"></div>
+            </div>
+            {/* Loading skeleton for buttons */}
+            <div className="hidden md:flex space-x-4">
+              <div className="w-24 h-10 bg-gray-200 rounded animate-pulse"></div>
+              <div className="w-24 h-10 bg-gray-200 rounded animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+      </nav>
+    );
+  }
 
   return (
-    <nav className="bg-white shadow-md sticky top-0 z-50">
+    <nav className="bg-white shadow-lg sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo Section */}
+        <div className="flex justify-between items-center h-20">
+          {/* Logo Section - Made Larger */}
           <div className="flex items-center">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="relative w-32 h-12 md:w-40 md:h-14">
+            <Link href="/" className="flex items-center space-x-2 group">
+              <div className="relative w-48 h-16 md:w-56 md:h-20 lg:w-64 lg:h-24 transition-all duration-300 group-hover:scale-105">
                 <Image
                   src="/Logo.png"
                   alt="Nairobi Escorts Logo"
                   fill
-                  className="object-contain"
+                  className="object-contain scale-300"
                   priority
+                  sizes="(max-width: 768px) 192px, (max-width: 1024px) 224px, 256px"
                 />
               </div>
-              <span className="ml-2 text-lg md:text-xl font-bold text-red-700 hidden sm:inline">
+              <span className="ml-3 text-xl md:text-2xl lg:text-3xl font-bold text-red-700 hidden lg:inline tracking-tight">
                 Nairobi Escorts
               </span>
             </Link>
           </div>
 
           {/* Desktop Navigation Links - Hidden on mobile */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-10 xl:space-x-12">
             <Link 
               href="/" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors text-sm lg:text-base"
+              className={`text-gray-800 hover:text-red-600 font-semibold transition-all duration-300 text-base lg:text-lg relative group ${
+                pathname === '/' ? 'text-red-600' : ''
+              }`}
             >
               Home
+              <span className={`absolute -bottom-1 left-0 w-0 h-0.5 bg-red-600 transition-all duration-300 group-hover:w-full ${
+                pathname === '/' ? 'w-full' : ''
+              }`}></span>
             </Link>
             
             <Link 
               href="/about" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors text-sm lg:text-base"
+              className={`text-gray-800 hover:text-red-600 font-semibold transition-all duration-300 text-base lg:text-lg relative group ${
+                pathname === '/about' ? 'text-red-600' : ''
+              }`}
             >
               About
+              <span className={`absolute -bottom-1 left-0 w-0 h-0.5 bg-red-600 transition-all duration-300 group-hover:w-full ${
+                pathname === '/about' ? 'w-full' : ''
+              }`}></span>
             </Link>
             
             <Link 
               href="/providers" 
-              className="text-gray-700 hover:text-red-600 font-medium transition-colors text-sm lg:text-base"
+              className={`text-gray-800 hover:text-red-600 font-semibold transition-all duration-300 text-base lg:text-lg relative group ${
+                pathname === '/providers' ? 'text-red-600' : ''
+              }`}
             >
               Service Providers
+              <span className={`absolute -bottom-1 left-0 w-0 h-0.5 bg-red-600 transition-all duration-300 group-hover:w-full ${
+                pathname === '/providers' ? 'w-full' : ''
+              }`}></span>
             </Link>
             
-            <div className="flex items-center space-x-4">
-              <Link 
-                href="/login" 
-                className="px-4 py-2 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm lg:text-base"
-              >
-                Login
-              </Link>
-              
-              <Link 
-                href="/register" 
-                className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all font-medium text-sm lg:text-base"
-              >
-                Register
-              </Link>
-            </div>
+            {/* Conditional rendering based on login status */}
+            {isLoggedIn ? (
+              <div className="flex items-center space-x-6 ml-4">
+                {/* Dashboard button */}
+                <Link 
+                  href="/dashboard" 
+                  className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 text-base lg:text-lg border-2
+                    ${pathname === '/dashboard' 
+                      ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-200' 
+                      : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
+                    }`}
+                >
+                  Dashboard
+                </Link>
+                
+                {/* Logout button */}
+                <button
+                  onClick={handleLogout}
+                  className="px-6 py-2.5 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 hover:shadow-lg hover:shadow-red-200 transition-all duration-300 font-semibold text-base lg:text-lg border-2 border-red-600"
+                >
+                  Logout
+                </button>
+                
+                {/* User profile info */}
+                {user && (
+                  <div className="flex items-center space-x-2 ml-2">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center border-2 border-red-200">
+                      <span className="text-red-600 font-bold text-lg">
+                        {user.first_name?.charAt(0) || 'U'}
+                      </span>
+                    </div>
+                    <span className="text-sm text-gray-700 font-medium hidden lg:inline">
+                      {user.first_name}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center space-x-6 ml-4">
+                <Link 
+                  href="/login" 
+                  className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 text-base lg:text-lg border-2 
+                    ${pathname === '/login' 
+                      ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-200' 
+                      : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
+                    }`}
+                >
+                  Login
+                </Link>
+                
+                <Link 
+                  href="/register" 
+                  className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 text-base lg:text-lg border-2
+                    ${pathname === '/register' 
+                      ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-200' 
+                      : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
+                    }`}
+                >
+                  Register
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Mobile menu button */}
           <div className="md:hidden flex items-center space-x-4">
-            <Link 
-              href="/login" 
-              className="px-3 py-1.5 text-red-600 border border-red-600 rounded-lg hover:bg-red-50 transition-colors font-medium text-sm"
-            >
-              Login
-            </Link>
+            {/* Conditional mobile buttons */}
+            {isLoggedIn ? (
+              <>
+                {/* Mobile dashboard link */}
+                <Link 
+                  href="/dashboard" 
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 text-sm border-2
+                    ${pathname === '/dashboard' 
+                      ? 'bg-red-600 text-white border-red-600' 
+                      : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white'
+                    }`}
+                >
+                  Dashboard
+                </Link>
+                
+                {/* Mobile logout button */}
+                <button
+                  onClick={handleLogout}
+                  className="px-4 py-2 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg hover:from-red-700 hover:to-red-800 transition-all duration-300 font-semibold text-sm border-2 border-red-600"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <Link 
+                href="/login" 
+                className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 text-sm border-2
+                  ${pathname === '/login' 
+                    ? 'bg-red-600 text-white border-red-600' 
+                    : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white'
+                  }`}
+              >
+                Login
+              </Link>
+            )}
             
             <button
               onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="inline-flex items-center justify-center p-2 rounded-md text-gray-700 hover:text-red-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-red-500"
+              className="inline-flex items-center justify-center p-3 rounded-lg text-gray-800 hover:text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-all duration-300"
               aria-expanded="false"
             >
               <span className="sr-only">Open main menu</span>
-              {/* Hamburger icon */}
-              {!isMenuOpen ? (
-                <svg className="block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              ) : (
-                <svg className="block h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              )}
+              {/* Animated Hamburger icon */}
+              <div className="w-6 h-6 relative">
+                <span className={`absolute left-0 top-1/2 h-0.5 w-6 bg-current transform transition-all duration-300 ${
+                  isMenuOpen ? 'rotate-45 -translate-y-1' : '-translate-y-2'
+                }`}></span>
+                <span className={`absolute left-0 top-1/2 h-0.5 w-6 bg-current transform transition-all duration-300 ${
+                  isMenuOpen ? 'opacity-0' : ''
+                }`}></span>
+                <span className={`absolute left-0 top-1/2 h-0.5 w-6 bg-current transform transition-all duration-300 ${
+                  isMenuOpen ? '-rotate-45 translate-y-1' : 'translate-y-2'
+                }`}></span>
+              </div>
             </button>
           </div>
         </div>
 
         {/* Mobile menu, show/hide based on menu state */}
         {isMenuOpen && (
-          <div className="md:hidden border-t border-gray-200">
-            <div className="px-2 pt-2 pb-3 space-y-1">
+          <div className="md:hidden border-t border-red-100 bg-gradient-to-b from-white to-red-50">
+            <div className="px-4 pt-4 pb-6 space-y-3">
               <Link
                 href="/"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-red-600 hover:bg-gray-50"
+                className={`block px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 ${
+                  pathname === '/' 
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-200' 
+                    : 'text-gray-800 hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-200'
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 Home
@@ -112,29 +271,79 @@ export default function Navbar() {
               
               <Link
                 href="/about"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-red-600 hover:bg-gray-50"
+                className={`block px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 ${
+                  pathname === '/about' 
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-200' 
+                    : 'text-gray-800 hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-200'
+                }`}
                 onClick={() => setIsMenuOpen(false)}
               >
                 About
               </Link>
               
-              <Link
-                href="/providers"
-                className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-red-600 hover:bg-gray-50"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                Service Providers
-              </Link>
+            
               
-              <div className="pt-4 pb-2">
-                <Link
-                  href="/register"
-                  className="block w-full text-center px-4 py-3 bg-gradient-to-r from-red-600 to-red-700 text-white rounded-lg font-medium hover:from-red-700 hover:to-red-800 transition-all"
-                  onClick={() => setIsMenuOpen(false)}
-                >
-                  Register as Provider
-                </Link>
-              </div>
+              {isLoggedIn ? (
+                <div className="pt-6 space-y-4">
+                  <Link
+                    href="/dashboard"
+                    className={`block w-full px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 text-center ${
+                      pathname === '/dashboard' 
+                        ? 'bg-red-600 text-white border-2 border-red-600 shadow-lg shadow-red-200' 
+                        : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
+                    }`}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Dashboard
+                  </Link>
+                  
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setIsMenuOpen(false);
+                    }}
+                    className="block w-full px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 text-center bg-gradient-to-r from-red-600 to-red-700 text-white border-2 border-red-600 hover:from-red-700 hover:to-red-800 hover:shadow-lg hover:shadow-red-200"
+                  >
+                    Logout
+                  </button>
+                  
+                  {user && (
+                    <div className="px-4 py-3 border-t border-red-100 mt-4">
+                      <p className="text-sm text-gray-500">Logged in as</p>
+                      <p className="font-medium text-gray-900 text-lg">
+                        {user.first_name} {user.last_name}
+                      </p>
+                      <p className="text-sm text-gray-600">{user.email}</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="pt-6 space-y-4">
+                  <Link
+                    href="/login"
+                    className={`block w-full px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 text-center ${
+                      pathname === '/login' 
+                        ? 'bg-red-600 text-white border-2 border-red-600 shadow-lg shadow-red-200' 
+                        : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
+                    }`}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Login
+                  </Link>
+                  
+                  <Link
+                    href="/register"
+                    className={`block w-full px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 text-center ${
+                      pathname === '/register' 
+                        ? 'bg-red-600 text-white border-2 border-red-600 shadow-lg shadow-red-200' 
+                        : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
+                    }`}
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    Register
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}

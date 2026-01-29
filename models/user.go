@@ -22,6 +22,7 @@ type User struct {
 	Nationality       string `bson:"nationality" json:"nationality,omitempty"`
 
 	Services           []string  `bson:"services" json:"services"`
+	Images             []string  `json:"images,omitempty" bson:"images,omitempty"`
 	ImageUrl           string    `bson:"image_url" json:"image_url"`
 	IsActive           bool      `bson:"is_active" json:"is_active"`
 	Role               string    `bson:"role" json:"role"` // "user" or "admin"

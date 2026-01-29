@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
 
 interface User {
   _id?: string;
@@ -19,6 +18,7 @@ interface User {
   location: string;
   services: string[];
   image_url?: string;
+  images?: string[];
   is_active: boolean;
   role: string;
   has_subscription: boolean;
@@ -50,6 +50,7 @@ const orientationOptions = ['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual
 const nationalityOptions = ['Kenyan', 'Ugandan', 'Tanzanian', 'Rwandan', 'Burundian', 'Other'];
 
 const BACKEND_URL = 'http://localhost:8080';
+const MAX_IMAGES = 5;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -58,6 +59,7 @@ export default function DashboardPage() {
   const [editMode, setEditMode] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -89,9 +91,15 @@ export default function DashboardPage() {
         console.log('User data fetched:', data);
         
         if (data.success && data.user) {
-          // Ensure services is always an array
+          // Ensure images array exists
+          const images = Array.isArray(data.user.images) 
+            ? data.user.images 
+            : (data.user.image_url ? [data.user.image_url] : []);
+          
           const userData = {
             ...data.user,
+            images: images,
+            image_url: images[0] || data.user.image_url || '',
             services: Array.isArray(data.user.services) ? data.user.services : []
           };
           setUser(userData);
@@ -116,7 +124,6 @@ export default function DashboardPage() {
     setUser(prev => {
       if (!prev) return null;
       
-      // Handle special cases
       if (field === 'age') {
         const numValue = parseInt(value) || 0;
         return { ...prev, [field]: numValue >= 18 ? numValue : 18 };
@@ -126,88 +133,177 @@ export default function DashboardPage() {
     });
   };
 
-  // Update your handleFileUpload function:
-const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const files = e.target.files;
-  if (!files || files.length === 0 || !user) return;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0 || !user) return;
 
-  // Validate file size and type
-  const maxSize = 5 * 1024 * 1024; // 5MB
-  const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-  
-  const invalidFiles = Array.from(files).filter(file => 
-    file.size > maxSize || !validTypes.includes(file.type)
-  );
-  
-  if (invalidFiles.length > 0) {
-    alert('Some files are too large or invalid type. Max 5MB, JPG/PNG/WebP only.');
-    return;
-  }
-
-  setUploading(true);
-  
-  try {
-    const token = localStorage.getItem('token');
+    const maxSize = 5 * 1024 * 1024; // 5MB
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
     
-    if (!token) {
-      router.push('/login');
+    // Filter valid files
+    const validFiles = Array.from(files).filter(file => 
+      file.size <= maxSize && validTypes.includes(file.type)
+    );
+    
+    if (validFiles.length === 0) {
+      alert('Please select valid image files (JPG, PNG, WebP, max 5MB each)');
       return;
     }
 
-    const formData = new FormData();
+    const currentImages = user.images || [];
+    const availableSlots = MAX_IMAGES - currentImages.length;
     
-    // Add all files (limit to 5 total)
-    const filesToUpload = Array.from(files).slice(0, 5);
-    filesToUpload.forEach(file => {
-      formData.append('images', file);
-    });
-
-    console.log('Uploading files:', filesToUpload);
-
-    const response = await fetch(`${BACKEND_URL}/auth/upload-images`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        // Don't set Content-Type header for FormData - browser will set it automatically
-      },
-      body: formData,
-    });
-
-    // Check if response is OK
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Upload failed: ${response.status} ${errorText}`);
+    if (availableSlots <= 0) {
+      alert(`You have reached the maximum of ${MAX_IMAGES} photos. Please remove some before uploading more.`);
+      return;
     }
 
-    const data = await response.json();
-    console.log('Upload response:', data);
+    const filesToUpload = validFiles.slice(0, availableSlots);
+    
+    if (filesToUpload.length < validFiles.length) {
+      alert(`You can only upload ${availableSlots} more photo(s) (${MAX_IMAGES} total)`);
+    }
 
-    if (data.success && data.imageUrls && data.imageUrls.length > 0) {
-      // Update user with first image URL
-      setUser({
-        ...user,
-        image_url: data.imageUrls[0]
+    setUploading(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+
+      const formData = new FormData();
+      filesToUpload.forEach(file => {
+        formData.append('images', file);
       });
-      alert('Photos uploaded successfully!');
-    } else {
-      throw new Error(data.error || 'Failed to upload images');
-    }
-  } catch (error: any) {
-    console.error('Error uploading images:', error);
-    alert(`Failed to upload images: ${error.message}`);
-  } finally {
-    setUploading(false);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }
-};
 
-  // FIXED: Safe service toggle function
+      console.log('Uploading files:', filesToUpload);
+
+      const response = await fetch(`${BACKEND_URL}/auth/upload-images`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${response.status} ${errorText}`);
+      }
+
+      const data = await response.json();
+      console.log('Upload response:', data);
+
+      if (data.success && data.imageUrls && data.imageUrls.length > 0) {
+        // Update user with all images
+        const updatedImages = [...currentImages, ...data.imageUrls];
+        setUser({
+          ...user,
+          images: updatedImages,
+          image_url: updatedImages[0] || ''
+        });
+        alert(`Successfully uploaded ${data.imageUrls.length} photo(s)! Total: ${updatedImages.length}/${MAX_IMAGES}`);
+        await fetchUserData(); // Refresh to get updated data
+      } else {
+        throw new Error(data.error || 'Failed to upload images');
+      }
+    } catch (error: any) {
+      console.error('Error uploading images:', error);
+      alert(`Failed to upload images: ${error.message}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleDeleteImage = async (index: number) => {
+    if (!user || !user.images || index >= user.images.length) return;
+    
+    const imageUrl = user.images[index];
+    if (!imageUrl) return;
+    
+    // Confirm deletion
+    if (!window.confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
+      return;
+    }
+    
+    setDeletingIndex(index);
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        router.push('/login');
+        return;
+      }
+      
+      // Extract filename from URL
+      const urlParts = imageUrl.split('/');
+      const filename = urlParts[urlParts.length - 1];
+      
+      // Send DELETE request to backend
+      const response = await fetch(`${BACKEND_URL}/auth/delete-image`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          imageUrl: imageUrl,
+          filename: filename 
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Delete failed: ${response.status} ${errorText}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        // Update local state to remove the image
+        const updatedImages = [...user.images];
+        updatedImages.splice(index, 1);
+        
+        setUser({
+          ...user,
+          images: updatedImages,
+          image_url: updatedImages[0] || ''
+        });
+        
+        alert('Photo deleted successfully!');
+      } else {
+        throw new Error(data.error || 'Failed to delete image');
+      }
+    } catch (error: any) {
+      console.error('Error deleting image:', error);
+      alert(`Failed to delete photo: ${error.message}`);
+      
+      // Even if backend fails, we can still remove from frontend state
+      // but inform the user it might still exist on server
+      const updatedImages = [...user.images || []];
+      updatedImages.splice(index, 1);
+      
+      setUser({
+        ...user!,
+        images: updatedImages,
+        image_url: updatedImages[0] || ''
+      });
+      
+      alert('Photo removed from your profile, but may still exist on the server.');
+    } finally {
+      setDeletingIndex(null);
+    }
+  };
+
   const handleServiceToggle = (service: string) => {
     if (!user) return;
     
-    // Ensure services is always an array
     const currentServices = Array.isArray(user.services) ? user.services : [];
     
     const newServices = currentServices.includes(service)
@@ -217,7 +313,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     setUser({ ...user, services: newServices });
   };
 
-  // FIXED: Save profile function
   const handleSaveProfile = async () => {
     if (!user) return;
     
@@ -232,7 +327,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         return;
       }
 
-      // Prepare update data
       const updateData = {
         first_name: user.first_name,
         last_name: user.last_name,
@@ -270,7 +364,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       if (response.ok && data.success) {
         alert('Profile updated successfully!');
         setEditMode(false);
-        // Refresh user data
         await fetchUserData();
       } else {
         setError(data.error || 'Failed to update profile');
@@ -291,10 +384,14 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     router.push('/login');
   };
 
-  // Helper function to get user's full name
   const getFullName = () => {
     if (!user) return '';
     return `${user.first_name} ${user.last_name}`;
+  };
+
+  const getImageCount = () => {
+    if (!user || !user.images) return 0;
+    return user.images.length;
   };
 
   if (loading) {
@@ -346,7 +443,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Error Display */}
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
           <div className="flex">
@@ -362,7 +458,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         </div>
       )}
 
-      {/* Header */}
       <header className="bg-white shadow">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex justify-between items-center">
@@ -381,7 +476,6 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow p-6">
             <div className="flex items-center">
@@ -433,71 +527,133 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             <div className="bg-white rounded-xl shadow p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-bold text-gray-900">Profile Pictures</h2>
-                <span className="text-sm text-gray-500">
-                  {user.image_url ? '1/5' : '0/5'} photos
+                <span className="text-sm font-medium text-purple-600">
+                  {getImageCount()}/{MAX_IMAGES} photos
                 </span>
               </div>
               
               <p className="text-sm text-gray-600 mb-4">
-                Upload 1-5 photos (Max 5MB each). Clear, high-quality photos get more views.
+                Upload up to {MAX_IMAGES} photos (Max 5MB each). Clear, high-quality photos get more views.
               </p>
 
               {/* Profile Picture Grid */}
               <div className="mb-6">
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Main Profile Picture */}
-                  <div className="col-span-2">
-                    <div className="relative">
-                      <div className={`w-full h-48 rounded-lg overflow-hidden ${!user.image_url ? 'border-2 border-dashed border-gray-300' : ''}`}>
-                        {user.image_url ? (
-                          <img
-                            src={user.image_url}
-                            alt="Profile"
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center bg-gray-50">
-                            <svg className="w-12 h-12 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                            </svg>
-                            <span className="text-sm text-gray-500">Main Photo</span>
+                {(() => {
+                  const images = user.images || [];
+                  const imageCount = images.length;
+                  
+                  if (imageCount > 0) {
+                    return (
+                      <div className="grid grid-cols-2 gap-4">
+                        {/* Main Profile Picture - first image */}
+                        <div className="col-span-2">
+                          <div className="relative">
+                            <div className="w-full h-48 rounded-lg overflow-hidden border border-gray-200">
+                              <img
+                                src={images[0]}
+                                alt="Profile"
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute bottom-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                                Main Photo
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteImage(0)}
+                              disabled={deletingIndex === 0}
+                              className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Delete photo"
+                            >
+                              {deletingIndex === 0 ? (
+                                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              ) : (
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )}
+                            </button>
                           </div>
-                        )}
-                      </div>
-                      {user.image_url && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            // Remove image logic
-                            setUser({ ...user, image_url: '' });
-                          }}
-                          className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full hover:bg-red-600 transition-colors"
-                          title="Remove photo"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2 text-center">Main Profile Picture</p>
-                  </div>
+                        </div>
 
-                  {/* Additional Photo Slots */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {Array.from({ length: 4 }).map((_, index) => (
-                      <div
-                        key={index}
-                        className="aspect-square w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-gray-50"
-                      >
-                        <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                        </svg>
-                        <span className="text-xs text-gray-500">Slot {index + 2}</span>
+                        {/* Additional Photos */}
+                        <div className="grid grid-cols-2 gap-4 col-span-2">
+                          {images.slice(1).map((image, index) => (
+                            <div key={index + 1} className="relative">
+                              <div className="aspect-square w-full rounded-lg overflow-hidden border border-gray-200">
+                                <img
+                                  src={image}
+                                  alt={`Profile ${index + 2}`}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteImage(index + 1)}
+                                disabled={deletingIndex === index + 1}
+                                className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Delete photo"
+                              >
+                                {deletingIndex === index + 1 ? (
+                                  <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                ) : (
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                )}
+                              </button>
+                              <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-1 py-0.5 rounded">
+                                Photo {index + 2}
+                              </div>
+                            </div>
+                          ))}
+                          
+                          {/* Empty slots */}
+                          {Array.from({ length: MAX_IMAGES - imageCount }).map((_, index) => (
+                            <div
+                              key={`empty-${index}`}
+                              className="aspect-square w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-gray-50"
+                            >
+                              <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                              <span className="text-xs text-gray-500">
+                                Slot {imageCount + index + 1}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                    );
+                  } else {
+                    /* No photos yet - show all empty slots */
+                    return (
+                      <div className="grid grid-cols-2 gap-4">
+                        {Array.from({ length: MAX_IMAGES }).map((_, index) => (
+                          <div
+                            key={index}
+                            className={`aspect-square w-full border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center bg-gray-50 ${
+                              index === 0 ? 'col-span-2 h-48' : ''
+                            }`}
+                          >
+                            <svg className="w-8 h-8 text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            <span className="text-xs text-gray-500">
+                              {index === 0 ? 'Main Photo' : `Photo ${index + 1}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                })()}
               </div>
 
               {/* Upload Button */}
@@ -510,9 +666,14 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   multiple
                   className="hidden"
                   id="profile-upload"
+                  disabled={getImageCount() >= MAX_IMAGES || uploading}
                 />
                 <label htmlFor="profile-upload">
-                  <div className="w-full py-3 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all cursor-pointer flex items-center justify-center">
+                  <div className={`w-full py-3 px-4 text-white rounded-lg transition-all flex items-center justify-center ${
+                    getImageCount() >= MAX_IMAGES
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 cursor-pointer'
+                  }`}>
                     {uploading ? (
                       <span className="flex items-center">
                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
@@ -526,7 +687,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                         <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
-                        Upload Photos
+                        {getImageCount() >= MAX_IMAGES ? 'Maximum Reached' : 'Upload Photos'}
                       </span>
                     )}
                   </div>
@@ -736,14 +897,13 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                     />
                   </div>
 
-                  {/* Services - FIXED */}
+                  {/* Services */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-3">
                       Services Offered
                     </label>
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {serviceOptions.map(service => {
-                        // SAFE check: Ensure user.services is an array
                         const isSelected = Array.isArray(user.services) && user.services.includes(service);
                         
                         return (
