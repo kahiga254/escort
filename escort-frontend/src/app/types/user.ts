@@ -1,5 +1,6 @@
 export interface User {
     id: string;
+    _id?: string;
     full_name: string;
     phone_no: string;
     image_url: string;

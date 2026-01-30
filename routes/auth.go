@@ -37,6 +37,44 @@ func AuthRoutes(route *gin.Engine) {
 	//MPESA CALLBACK Webhook
 	route.POST("/mpesa/callback", controllers.MpesaCallback)
 
+	// Public route to get detailed user profile by ID
+	route.GET("/user/:id", func(c *gin.Context) {
+		userID := c.Param("id")
+
+		// Check if ID is valid ObjectID
+		if !primitive.IsValidObjectID(userID) {
+			c.JSON(400, gin.H{"error": "Invalid user ID"})
+			return
+		}
+
+		userObjID, err := primitive.ObjectIDFromHex(userID)
+		if err != nil {
+			c.JSON(400, gin.H{"error": "Invalid user ID format"})
+			return
+		}
+
+		// Find user with detailed information
+		var user bson.M
+		err = database.UserCollection.FindOne(context.Background(),
+			bson.M{"_id": userObjID}).Decode(&user)
+
+		if err != nil {
+			c.JSON(404, gin.H{"error": "User not found"})
+			return
+		}
+
+		// Remove sensitive information
+		delete(user, "password")
+		delete(user, "email")
+		delete(user, "role")
+
+		// Format response
+		c.JSON(200, gin.H{
+			"success": true,
+			"user":    user,
+		})
+	})
+
 	auth := route.Group("/auth")
 
 	{
