@@ -49,7 +49,7 @@ const genderOptions = ['Male', 'Female', 'Non-binary', 'Other'];
 const orientationOptions = ['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Asexual'];
 const nationalityOptions = ['Kenyan', 'Ugandan', 'Tanzanian', 'Rwandan', 'Burundian', 'Other'];
 
-const BACKEND_URL = 'http://localhost:8080';
+const BACKEND_URL = 'http://https://escort-vcix.onrender.com';
 const MAX_IMAGES = 5;
 
 export default function DashboardPage() {

@@ -38,7 +38,7 @@ export default function RecentUsers({ users }: RecentUsersProps) {
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:8080/admin/approve/${userId}`, {
+      const response = await fetch(`http://https://escort-vcix.onrender.com/admin/approve/${userId}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

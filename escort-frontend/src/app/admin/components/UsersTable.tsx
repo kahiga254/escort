@@ -87,7 +87,7 @@ export default function UsersTable({
     setActionLoading(userId);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:8080/admin/users/${userId}/status`, {
+      const response = await fetch(`http://https://escort-vcix.onrender.com/admin/users/${userId}/status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -118,7 +118,7 @@ export default function UsersTable({
     setActionLoading(`delete-${userId}`);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:8080/admin/users/${userId}`, {
+      const response = await fetch(`http://https://escort-vcix.onrender.com/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,

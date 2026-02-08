@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import UsersTable from '../components/UsersTable';
 
-const API_BASE_URL = 'http://localhost:8080';
+const API_BASE_URL = 'http://https://escort-vcix.onrender.com';
 
 export default function UsersPage() {
   const searchParams = useSearchParams();

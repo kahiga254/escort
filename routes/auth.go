@@ -350,7 +350,7 @@ func AuthRoutes(route *gin.Engine) {
 				}
 
 				// For local development, use a local URL
-				imageUrl := fmt.Sprintf("http://localhost:8080/uploads/%s", filename)
+				imageUrl := fmt.Sprintf("http://https://escort-vcix.onrender.com/uploads/%s", filename)
 				uploadedImageUrls = append(uploadedImageUrls, imageUrl)
 			}
 

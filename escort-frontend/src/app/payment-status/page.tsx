@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 
-const BACKEND_URL = 'http://localhost:8080';
+const BACKEND_URL = 'http://https://escort-vcix.onrender.com';
 export default function PaymentStatusPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
