@@ -140,23 +140,36 @@ export default function DashboardPage() {
       const data = await response.json();
       console.log('User data fetched:', data);
       
-      if (data.success && data.user) {
-        // Ensure images array exists
-        const images = Array.isArray(data.user.images) 
-          ? data.user.images 
-          : (data.user.image_url ? [data.user.image_url] : []);
-        
-        const userData = {
-          ...data.user,
-          images: images,
-          image_url: images[0] || data.user.image_url || '',
-          services: Array.isArray(data.user.services) ? data.user.services : [],
-          is_active: data.user.is_active || false,
-          has_subscription: data.user.has_subscription || false,
-          subscription_status: data.user.subscription_status || 'pending',
-          payment_date: data.user.payment_date || data.user.updatedAt || null,
-          activation_date: data.user.activation_date || data.user.updatedAt || null
-        };
+    if (data.success && data.user) {
+  // FIX: Add missing colon in https URLs
+  const fixImageUrl = (url: any): string => {
+    if (!url || typeof url !== 'string') return '';
+    // Fix: https// -> https:// (missing colon)
+    if (url.startsWith('https//')) {
+      url = 'https://' + url.substring(7);
+    }
+    return url;
+  };
+
+  // Process images - fix broken URLs
+  let images: string[] = [];
+  if (Array.isArray(data.user.images) && data.user.images.length > 0) {
+    images = data.user.images.map(fixImageUrl).filter((url: string) => url !== '');
+  } else if (data.user.image_url) {
+    images = [fixImageUrl(data.user.image_url)];
+  }
+  
+  const userData = {
+    ...data.user,
+    images: images,
+    image_url: images[0] || '',
+    services: Array.isArray(data.user.services) ? data.user.services : [],
+    is_active: data.user.is_active || false,
+    has_subscription: data.user.has_subscription || false,
+    subscription_status: data.user.subscription_status || 'pending',
+    payment_date: data.user.payment_date || data.user.updatedAt || null,
+    activation_date: data.user.activation_date || data.user.updatedAt || null
+  };
         
         setUser(userData);
         localStorage.setItem('user', JSON.stringify(userData));
