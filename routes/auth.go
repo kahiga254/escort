@@ -19,7 +19,6 @@ import (
 )
 
 func AuthRoutes(route *gin.Engine) {
-	route.Static("/uploads", "./uploads")
 
 	// Public routes (no authentication required)
 
