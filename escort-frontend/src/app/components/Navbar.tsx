@@ -23,8 +23,14 @@ export default function Navbar() {
     const userData = localStorage.getItem('user');
     
     if (token && userData) {
+      const parsedUser = JSON.parse(userData);
       setIsLoggedIn(true);
-      setUser(JSON.parse(userData));
+      setUser(parsedUser);
+      
+      // If user is admin and on user dashboard, redirect to admin dashboard
+      if (parsedUser.role === 'admin' && pathname === '/dashboard') {
+        router.push('/admin');
+      }
     } else {
       setIsLoggedIn(false);
       setUser(null);
@@ -46,6 +52,25 @@ export default function Navbar() {
     
     // Redirect to home page
     router.push('/');
+  };
+
+  // Get the correct dashboard URL based on user role
+  const getDashboardUrl = () => {
+    if (!user) return '/dashboard'; // Default fallback
+    
+    // Check user role and return appropriate dashboard URL
+    if (user.role === 'admin') {
+      return '/admin'; // Admin dashboard
+    } else {
+      return '/dashboard'; // Regular user dashboard
+    }
+  };
+
+  // Handle dashboard click
+  const handleDashboardClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const dashboardUrl = getDashboardUrl();
+    router.push(dashboardUrl);
   };
 
   if (loading) {
@@ -132,17 +157,17 @@ export default function Navbar() {
             {/* Conditional rendering based on login status */}
             {isLoggedIn ? (
               <div className="flex items-center space-x-6 ml-4">
-                {/* Dashboard button */}
-                <Link 
-                  href="/dashboard" 
-                  className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 text-base lg:text-lg border-2
-                    ${pathname === '/dashboard' 
+                {/* Dashboard button - FIXED */}
+                <button
+                  onClick={handleDashboardClick}
+                  className={`px-6 py-2.5 rounded-lg font-semibold transition-all duration-300 text-base lg:text-lg border-2 cursor-pointer
+                    ${(pathname === '/dashboard' || pathname === '/admin') 
                       ? 'bg-red-600 text-white border-red-600 shadow-lg shadow-red-200' 
                       : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
                     }`}
                 >
-                  Dashboard
-                </Link>
+                  {user?.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'}
+                </button>
                 
                 {/* Logout button */}
                 <button
@@ -161,7 +186,7 @@ export default function Navbar() {
                       </span>
                     </div>
                     <span className="text-sm text-gray-700 font-medium hidden lg:inline">
-                      {user.first_name}
+                      {user.first_name} {user.role === 'admin' && '(Admin)'}
                     </span>
                   </div>
                 )}
@@ -198,17 +223,17 @@ export default function Navbar() {
             {/* Conditional mobile buttons */}
             {isLoggedIn ? (
               <>
-                {/* Mobile dashboard link */}
-                <Link 
-                  href="/dashboard" 
-                  className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 text-sm border-2
-                    ${pathname === '/dashboard' 
+                {/* Mobile dashboard button - FIXED */}
+                <button
+                  onClick={handleDashboardClick}
+                  className={`px-4 py-2 rounded-lg font-semibold transition-all duration-300 text-sm border-2 cursor-pointer
+                    ${(pathname === '/dashboard' || pathname === '/admin') 
                       ? 'bg-red-600 text-white border-red-600' 
                       : 'bg-white text-red-600 border-red-600 hover:bg-red-600 hover:text-white'
                     }`}
                 >
-                  Dashboard
-                </Link>
+                  {user?.role === 'admin' ? 'Admin' : 'Dashboard'}
+                </button>
                 
                 {/* Mobile logout button */}
                 <button
@@ -281,21 +306,22 @@ export default function Navbar() {
                 About
               </Link>
               
-            
-              
               {isLoggedIn ? (
                 <div className="pt-6 space-y-4">
-                  <Link
-                    href="/dashboard"
-                    className={`block w-full px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 text-center ${
-                      pathname === '/dashboard' 
+                  {/* Mobile dashboard button - FIXED */}
+                  <button
+                    onClick={(e) => {
+                      handleDashboardClick(e);
+                      setIsMenuOpen(false);
+                    }}
+                    className={`block w-full px-4 py-3.5 rounded-xl text-lg font-semibold transition-all duration-300 text-center cursor-pointer ${
+                      (pathname === '/dashboard' || pathname === '/admin') 
                         ? 'bg-red-600 text-white border-2 border-red-600 shadow-lg shadow-red-200' 
                         : 'bg-white text-red-600 border-2 border-red-600 hover:bg-red-600 hover:text-white hover:shadow-lg hover:shadow-red-200'
                     }`}
-                    onClick={() => setIsMenuOpen(false)}
                   >
-                    Dashboard
-                  </Link>
+                    {user?.role === 'admin' ? 'Admin Dashboard' : 'Dashboard'}
+                  </button>
                   
                   <button
                     onClick={() => {
@@ -314,6 +340,9 @@ export default function Navbar() {
                         {user.first_name} {user.last_name}
                       </p>
                       <p className="text-sm text-gray-600">{user.email}</p>
+                      {user.role === 'admin' && (
+                        <p className="text-sm text-red-600 font-semibold">Admin User</p>
+                      )}
                     </div>
                   )}
                 </div>
