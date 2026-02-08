@@ -453,50 +453,6 @@ func AuthRoutes(route *gin.Engine) {
 			// Remove image from array
 			updatedImages := append(currentImages[:imageIndex], currentImages[imageIndex+1:]...)
 
-			// Delete image from Cloudinary if it's a Cloudinary URL
-			if strings.Contains(request.ImageURL, "cloudinary.com") {
-				// Initialize Cloudinary
-				cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
-				apiKey := os.Getenv("CLOUDINARY_API_KEY")
-				apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
-
-				if cloudName != "" && apiKey != "" && apiSecret != "" {
-					cld, err := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
-					if err == nil {
-						ctx := context.Background()
-
-						// Extract public ID from Cloudinary URL
-						// Cloudinary URL format: https://res.cloudinary.com/cloud_name/image/upload/v1234567890/folder/public_id.jpg
-						urlParts := strings.Split(request.ImageURL, "/")
-						if len(urlParts) > 0 {
-							// Get the last part (filename with extension)
-							lastPart := urlParts[len(urlParts)-1]
-							// Remove version prefix if present (v1234567890/)
-							if idx := strings.Index(lastPart, "/"); idx != -1 {
-								lastPart = lastPart[idx+1:]
-							}
-							// Remove file extension
-							if idx := strings.LastIndex(lastPart, "."); idx != -1 {
-								lastPart = lastPart[:idx]
-							}
-
-							// Delete from Cloudinary
-							_, err = cld.Upload.Destroy(ctx, uploader.DestroyParams{
-								PublicID:     lastPart,
-								ResourceType: "image",
-							})
-
-							if err != nil {
-								fmt.Printf("Warning: Could not delete from Cloudinary: %v\n", err)
-								// Continue anyway - we'll remove from database
-							} else {
-								fmt.Printf("Successfully deleted from Cloudinary: %s\n", lastPart)
-							}
-						}
-					}
-				}
-			}
-
 			// Update user with new images array
 			updateData := bson.M{
 				"images":     updatedImages,

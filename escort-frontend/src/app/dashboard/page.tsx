@@ -300,7 +300,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleDeleteImage = async (index: number) => {
+ const handleDeleteImage = async (index: number) => {
   if (!user || !user.images || index >= user.images.length) return;
   
   const imageUrl = user.images[index];
@@ -320,11 +320,7 @@ export default function DashboardPage() {
       return;
     }
     
-    // ✅ REMOVED filename extraction - backend only needs imageUrl now
-    // const urlParts = imageUrl.split('/');
-    // const filename = urlParts[urlParts.length - 1];
-    
-    // ✅ Send only imageUrl to backend (Cloudinary handles everything)
+    // ⬇️⬇️⬇️ PERMANENT FIX: Send only imageUrl ⬇️⬇️⬇️
     const response = await fetch(`${BACKEND_URL}/auth/delete-image`, {
       method: 'DELETE',
       headers: {
@@ -332,7 +328,7 @@ export default function DashboardPage() {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ 
-        imageUrl: imageUrl  // ✅ Only send imageUrl, not filename
+        imageUrl: imageUrl  // ⬅️ ONLY imageUrl, NO filename
       }),
     });
     
