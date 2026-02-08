@@ -1,4 +1,3 @@
-// app/admin/components/DashboardStats.tsx
 'use client';
 
 interface DashboardStatsProps {

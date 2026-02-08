@@ -6,7 +6,7 @@ import DashboardStats from './components/DashboardStats';
 import RecentUsers from './components/RecentUsers';
 import RecentSubscriptions from './components/RecentSubscriptions';
 
-const API_BASE_URL = 'http://https://escort-vcix.onrender.com';
+const API_BASE_URL = 'https://escort-vcix.onrender.com';
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);

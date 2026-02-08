@@ -20,7 +20,7 @@ export default function UserGrid() {
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
 
   // Base URL for Go Backend
-  const API_BASE_URL = 'http://https://escort-vcix.onrender.com';
+  const API_BASE_URL = 'https://escort-vcix.onrender.com';
 
   // Fetch users on mount
   useEffect(() => {

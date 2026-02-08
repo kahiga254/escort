@@ -26,7 +26,7 @@ export default function LoginPage() {
     try {
       console.log('Attempting login for:', formData.email);
 
-      const response = await fetch('http://https://escort-vcix.onrender.com/auth/login', {
+      const response = await fetch('https://escort-vcix.onrender.com/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -993,6 +993,14 @@ func activateSubscription(checkoutID, receiptNumber string, amount float64) {
 
 	fmt.Printf("📋 Found subscription: %s\n", subscription.ID.Hex())
 
+	// Calculate expiry date based on plan duration
+	var plan models.SubscriptionPlan
+	database.SubscriptionPlanCollection.FindOne(ctx,
+		bson.M{"_id": subscription.PlanID},
+	).Decode(&plan)
+
+	expiryDate := time.Now().Add(time.Duration(plan.DurationDays) * 24 * time.Hour)
+
 	// 2. Update subscription to active
 	_, err = database.SubscriptionCollection.UpdateOne(ctx,
 		bson.M{"_id": subscription.ID},
@@ -1001,6 +1009,7 @@ func activateSubscription(checkoutID, receiptNumber string, amount float64) {
 			"mpesa_receipt": receiptNumber,
 			"amount_paid":   amount,
 			"payment_date":  time.Now(),
+			"expiry_date":   expiryDate, // Set expiry date
 			"updated_at":    time.Now(),
 		}},
 	)
@@ -1017,7 +1026,7 @@ func activateSubscription(checkoutID, receiptNumber string, amount float64) {
 		bson.M{"_id": subscription.UserID},
 		bson.M{"$set": bson.M{
 			"has_subscription":    true,
-			"subscription_expiry": subscription.ExpiryDate,
+			"subscription_expiry": expiryDate, // Use calculated expiry
 			"last_payment_date":   time.Now(),
 		}},
 	)
@@ -1031,12 +1040,10 @@ func activateSubscription(checkoutID, receiptNumber string, amount float64) {
 	var user models.User
 	database.UserCollection.FindOne(ctx, bson.M{"_id": subscription.UserID}).Decode(&user)
 
-	fmt.Printf("🎉 User %s (%s) now has active subscription!\n",
+	fmt.Printf("🎉 User %s (%s) now has active subscription until %s!\n",
 		user.FirstName+" "+user.LastName,
-		user.PhoneNo)
-
-	// 5. Send notification (optional - implement later)
-	// sendSubscriptionActivationNotification(user.PhoneNo, user.Email)
+		user.PhoneNo,
+		expiryDate.Format("2006-01-02"))
 }
 
 // processFailedPayment handles failed MPESA payments
@@ -1061,7 +1068,6 @@ func processFailedPayment(checkoutID, failureReason string) {
 	}
 }
 
-// CheckSubscriptionStatus allows users to check payment status
 func CheckSubscriptionStatus(c *gin.Context) {
 	userID, exists := c.Get("userID")
 	if !exists {
@@ -1108,9 +1114,48 @@ func CheckSubscriptionStatus(c *gin.Context) {
 		return
 	}
 
+	// Get plan details
+	var plan models.SubscriptionPlan
+	err = database.SubscriptionPlanCollection.FindOne(ctx,
+		bson.M{"_id": subscription.PlanID},
+	).Decode(&plan)
+
+	planName := "Unknown Plan"
+	planAmount := 0.0
+	durationDays := 0
+
+	if err == nil {
+		planName = plan.Name
+		planAmount = plan.Amount
+		durationDays = plan.DurationDays
+	}
+
+	// Calculate expiry date based on duration days
+	var expiryDate time.Time
+	if !subscription.ExpiryDate.IsZero() {
+		expiryDate = subscription.ExpiryDate
+	} else if durationDays > 0 {
+		// Calculate from start_date + duration_days
+		if !subscription.StartDate.IsZero() {
+			expiryDate = subscription.StartDate.Add(time.Duration(durationDays) * 24 * time.Hour)
+		} else {
+			expiryDate = subscription.CreatedAt.Add(time.Duration(durationDays) * 24 * time.Hour)
+		}
+	} else {
+		// Default 5 days if nothing else
+		expiryDate = subscription.CreatedAt.Add(5 * 24 * time.Hour)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"status":  subscription.Status,
-		"data":    subscription,
+		"success":       true,
+		"status":        subscription.Status,
+		"plan_name":     planName,
+		"amount":        planAmount, // Use plan amount, not subscription.AmountPaid
+		"duration_days": durationDays,
+		"expiry_date":   expiryDate.Format(time.RFC3339),
+		"mpesa_receipt": subscription.MpesaReceipt,
+		"phone_used":    subscription.PhoneUsed,  // Added to match your model
+		"amount_paid":   subscription.AmountPaid, // Added to match your model
+		"data":          subscription,
 	})
 }

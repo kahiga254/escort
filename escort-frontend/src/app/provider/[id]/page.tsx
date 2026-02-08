@@ -31,7 +31,8 @@ interface Provider {
   created_at?: string;
 }
 
-const API_BASE_URL = 'http://https://escort-vcix.onrender.com';
+// CORRECT: Your endpoint is /user/{id} not /users/{id}
+const API_BASE_URL = 'https://escort-vcix.onrender.com';
 
 export default function ProviderProfilePage() {
   const params = useParams();
@@ -55,6 +56,7 @@ export default function ProviderProfilePage() {
       setLoading(true);
       setError('');
 
+      // CORRECT ENDPOINT: /user/{id}
       const response = await fetch(`${API_BASE_URL}/user/${providerId}`);
       
       if (!response.ok) {
@@ -63,8 +65,21 @@ export default function ProviderProfilePage() {
 
       const data = await response.json();
       
-      if (data.success && data.user) {
-        // Ensure images array exists
+      console.log('API Response:', data); // Debug log
+      
+      // Handle different response structures
+      if (data.success && data.data) {
+        // Format 1: { success: true, data: { ...user }, message: "..." }
+        const userData = {
+          ...data.data,
+          full_name: data.data.full_name || `${data.data.first_name || ''} ${data.data.last_name || ''}`.trim(),
+          images: Array.isArray(data.data.images) ? data.data.images : 
+                 (data.data.image_url ? [data.data.image_url] : []),
+        };
+        setProvider(userData);
+      } 
+      else if (data.success && data.user) {
+        // Format 2: { success: true, user: { ...user }, message: "..." }
         const userData = {
           ...data.user,
           full_name: data.user.full_name || `${data.user.first_name || ''} ${data.user.last_name || ''}`.trim(),
@@ -72,8 +87,19 @@ export default function ProviderProfilePage() {
                  (data.user.image_url ? [data.user.image_url] : []),
         };
         setProvider(userData);
-      } else {
-        throw new Error(data.error || 'Provider not found');
+      }
+      else if (data._id) {
+        // Format 3: Direct user object { _id: "...", first_name: "...", ... }
+        const userData = {
+          ...data,
+          full_name: data.full_name || `${data.first_name || ''} ${data.last_name || ''}`.trim(),
+          images: Array.isArray(data.images) ? data.images : 
+                 (data.image_url ? [data.image_url] : []),
+        };
+        setProvider(userData);
+      }
+      else {
+        throw new Error(data.error || data.message || 'Provider not found');
       }
     } catch (err) {
       console.error('Error fetching provider:', err);
@@ -83,6 +109,7 @@ export default function ProviderProfilePage() {
     }
   };
 
+  // Rest of your component remains exactly the same...
   const handleCall = () => {
     if (provider?.phone_no && window.confirm(`Call ${provider.full_name} at ${provider.phone_no}?`)) {
       window.location.href = `tel:${provider.phone_no}`;
@@ -128,19 +155,24 @@ export default function ProviderProfilePage() {
           <div className="text-red-500 text-4xl mb-4">⚠️</div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Profile Not Found</h2>
           <p className="text-gray-600 mb-6">{error || 'The provider profile you are looking for does not exist.'}</p>
-          <div className="space-x-4">
+          <div className="space-y-4">
             <button
               onClick={() => router.push('/')}
-              className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+              className="w-full px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
             >
               Back to Home
             </button>
             <button
               onClick={fetchProviderDetails}
-              className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              className="w-full px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Try Again
             </button>
+            {/* Debug info */}
+            <div className="mt-4 text-xs text-gray-500">
+              <p>Endpoint: {API_BASE_URL}/user/{providerId}</p>
+              <p>User ID: {providerId}</p>
+            </div>
           </div>
         </div>
       </div>

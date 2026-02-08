@@ -15,7 +15,7 @@ interface SubscriptionPlan {
   is_popular?: boolean;
 }
 
-const BACKEND_URL = 'http://https://escort-vcix.onrender.com';
+const BACKEND_URL = 'https://escort-vcix.onrender.com';
 
 export default function ActivationPage() {
   const router = useRouter();

@@ -1,4 +1,3 @@
-// app/admin/components/RecentSubscriptions.tsx
 'use client';
 
 import Link from 'next/link';
