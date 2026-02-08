@@ -8,17 +8,18 @@ import (
 	"escort/models"
 	"fmt"
 	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
+	"github.com/cloudinary/cloudinary-go/v2"
+	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func AuthRoutes(route *gin.Engine) {
+	route.Static("/uploads", "./uploads")
 
 	// Public routes (no authentication required)
 
@@ -251,7 +252,7 @@ func AuthRoutes(route *gin.Engine) {
 			}
 
 			// Parse multipart form
-			err := c.Request.ParseMultipartForm(50 << 20) // 50MB max for multiple files
+			err := c.Request.ParseMultipartForm(50 << 20) // 50MB max
 			if err != nil {
 				c.JSON(400, gin.H{"error": "Failed to parse form: " + err.Error()})
 				return
@@ -285,10 +286,8 @@ func AuthRoutes(route *gin.Engine) {
 				return
 			}
 
-			// Get existing images - handle both images array and image_url field
+			// Get existing images
 			var existingImages []string
-
-			// Check if images array exists
 			if imagesInterface, ok := existingUser["images"]; ok && imagesInterface != nil {
 				if imagesArray, ok := imagesInterface.(primitive.A); ok {
 					for _, img := range imagesArray {
@@ -296,13 +295,6 @@ func AuthRoutes(route *gin.Engine) {
 							existingImages = append(existingImages, str)
 						}
 					}
-				}
-			}
-
-			// If no images array but has image_url, use that
-			if len(existingImages) == 0 {
-				if imageURL, ok := existingUser["image_url"].(string); ok && imageURL != "" {
-					existingImages = append(existingImages, imageURL)
 				}
 			}
 
@@ -315,52 +307,63 @@ func AuthRoutes(route *gin.Engine) {
 				return
 			}
 
-			var uploadedImageUrls []string
+			// Initialize Cloudinary (set these as environment variables in Render)
+			cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
+			apiKey := os.Getenv("CLOUDINARY_API_KEY")
+			apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
 
-			// Ensure uploads directory exists
-			if err := os.MkdirAll("./uploads", 0755); err != nil {
-				c.JSON(500, gin.H{"error": "Failed to create uploads directory: " + err.Error()})
+			if cloudName == "" || apiKey == "" || apiSecret == "" {
+				c.JSON(500, gin.H{"error": "Cloudinary configuration missing"})
 				return
 			}
 
-			// Helper function to sanitize filenames
-			sanitizeFilename := func(filename string) string {
-				// Remove path traversal attempts
-				filename = filepath.Base(filename)
-				// Replace spaces with underscores
-				filename = strings.ReplaceAll(filename, " ", "_")
-				// Remove any non-alphanumeric characters except . _ -
-				reg := regexp.MustCompile(`[^a-zA-Z0-9._-]`)
-				filename = reg.ReplaceAllString(filename, "")
-				return filename
+			// Create Cloudinary instance
+			cld, err := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
+			if err != nil {
+				c.JSON(500, gin.H{"error": "Failed to initialize Cloudinary: " + err.Error()})
+				return
 			}
 
-			for _, file := range files {
-				// Create unique filename with timestamp
-				timestamp := time.Now().UnixNano()
-				extension := filepath.Ext(file.Filename)
-				safeFilename := sanitizeFilename(strings.TrimSuffix(file.Filename, extension))
-				filename := fmt.Sprintf("%s_%d_%s%s", userID.(string), timestamp, safeFilename, extension)
+			var uploadedImageUrls []string
+			ctx := context.Background()
 
-				// Save file to local directory
-				uploadPath := "./uploads/" + filename
-				if err := c.SaveUploadedFile(file, uploadPath); err != nil {
-					c.JSON(500, gin.H{"error": "Failed to save file: " + err.Error()})
+			for _, file := range files {
+				// Open the uploaded file
+				src, err := file.Open()
+				if err != nil {
+					c.JSON(500, gin.H{"error": "Failed to open file: " + err.Error()})
+					return
+				}
+				defer src.Close()
+
+				// Create unique public ID
+				timestamp := time.Now().UnixNano()
+				safeName := strings.ReplaceAll(file.Filename, " ", "_")
+				publicID := fmt.Sprintf("escort_app/%s/%d_%s", userID.(string), timestamp, safeName)
+
+				// Upload to Cloudinary
+				uploadResult, err := cld.Upload.Upload(ctx, src, uploader.UploadParams{
+					PublicID:       publicID,
+					Folder:         "escort_app/profiles",
+					Transformation: "f_auto,q_auto", // Auto format and quality
+					ResourceType:   "image",
+				})
+
+				if err != nil {
+					c.JSON(500, gin.H{"error": "Failed to upload to Cloudinary: " + err.Error()})
 					return
 				}
 
-				// For local development, use a local URL
-				imageUrl := fmt.Sprintf("https://escort-vcix.onrender.com/uploads/%s", filename)
-				uploadedImageUrls = append(uploadedImageUrls, imageUrl)
+				uploadedImageUrls = append(uploadedImageUrls, uploadResult.SecureURL)
 			}
 
 			// Combine existing images with new ones
 			allImages := append(existingImages, uploadedImageUrls...)
 
-			// Update user with all images (and set first as main image_url for backward compatibility)
+			// Update user with all images
 			updateData := bson.M{
 				"images":     allImages,
-				"image_url":  allImages[0], // First image as main for backward compatibility
+				"image_url":  allImages[0], // First image as main
 				"updated_at": time.Now(),
 			}
 
@@ -386,7 +389,7 @@ func AuthRoutes(route *gin.Engine) {
 
 		// Add this DELETE endpoint to your protected routes
 		protected.DELETE("/delete-image", func(c *gin.Context) {
-			fmt.Printf("DELETE /auth/delete-image route hit!")
+			fmt.Printf("DELETE /auth/delete-image route hit!\n")
 			userID, exists := c.Get("userID")
 			if !exists {
 				c.JSON(401, gin.H{"error": "Not authenticated"})
@@ -395,7 +398,6 @@ func AuthRoutes(route *gin.Engine) {
 
 			var request struct {
 				ImageURL string `json:"imageUrl"`
-				Filename string `json:"filename"`
 			}
 
 			if err := c.ShouldBindJSON(&request); err != nil {
@@ -403,8 +405,8 @@ func AuthRoutes(route *gin.Engine) {
 				return
 			}
 
-			if request.ImageURL == "" || request.Filename == "" {
-				c.JSON(400, gin.H{"error": "Image URL and filename are required"})
+			if request.ImageURL == "" {
+				c.JSON(400, gin.H{"error": "Image URL is required"})
 				return
 			}
 
@@ -451,23 +453,61 @@ func AuthRoutes(route *gin.Engine) {
 			// Remove image from array
 			updatedImages := append(currentImages[:imageIndex], currentImages[imageIndex+1:]...)
 
-			// Delete the actual file from server
-			filePath := "./uploads/" + request.Filename
-			if err := os.Remove(filePath); err != nil {
-				// Log the error but continue - the file might have been deleted already
-				fmt.Printf("Warning: Could not delete file %s: %v\n", filePath, err)
+			// Delete image from Cloudinary if it's a Cloudinary URL
+			if strings.Contains(request.ImageURL, "cloudinary.com") {
+				// Initialize Cloudinary
+				cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
+				apiKey := os.Getenv("CLOUDINARY_API_KEY")
+				apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
+
+				if cloudName != "" && apiKey != "" && apiSecret != "" {
+					cld, err := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
+					if err == nil {
+						ctx := context.Background()
+
+						// Extract public ID from Cloudinary URL
+						// Cloudinary URL format: https://res.cloudinary.com/cloud_name/image/upload/v1234567890/folder/public_id.jpg
+						urlParts := strings.Split(request.ImageURL, "/")
+						if len(urlParts) > 0 {
+							// Get the last part (filename with extension)
+							lastPart := urlParts[len(urlParts)-1]
+							// Remove version prefix if present (v1234567890/)
+							if idx := strings.Index(lastPart, "/"); idx != -1 {
+								lastPart = lastPart[idx+1:]
+							}
+							// Remove file extension
+							if idx := strings.LastIndex(lastPart, "."); idx != -1 {
+								lastPart = lastPart[:idx]
+							}
+
+							// Delete from Cloudinary
+							_, err = cld.Upload.Destroy(ctx, uploader.DestroyParams{
+								PublicID:     lastPart,
+								ResourceType: "image",
+							})
+
+							if err != nil {
+								fmt.Printf("Warning: Could not delete from Cloudinary: %v\n", err)
+								// Continue anyway - we'll remove from database
+							} else {
+								fmt.Printf("Successfully deleted from Cloudinary: %s\n", lastPart)
+							}
+						}
+					}
+				}
 			}
 
 			// Update user with new images array
 			updateData := bson.M{
 				"images":     updatedImages,
-				"image_url":  "", // Will be set below
 				"updated_at": time.Now(),
 			}
 
 			// Set image_url to first image if available
 			if len(updatedImages) > 0 {
 				updateData["image_url"] = updatedImages[0]
+			} else {
+				updateData["image_url"] = ""
 			}
 
 			_, err = database.UserCollection.UpdateOne(

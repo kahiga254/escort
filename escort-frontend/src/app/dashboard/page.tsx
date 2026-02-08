@@ -288,84 +288,83 @@ export default function DashboardPage() {
   };
 
   const handleDeleteImage = async (index: number) => {
-    if (!user || !user.images || index >= user.images.length) return;
-    
-    const imageUrl = user.images[index];
-    if (!imageUrl) return;
-    
-    // Confirm deletion
-    if (!window.confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
+  if (!user || !user.images || index >= user.images.length) return;
+  
+  const imageUrl = user.images[index];
+  if (!imageUrl) return;
+  
+  // Confirm deletion
+  if (!window.confirm('Are you sure you want to delete this photo? This action cannot be undone.')) {
+    return;
+  }
+  
+  setDeletingIndex(index);
+  
+  try {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      router.push('/login');
       return;
     }
     
-    setDeletingIndex(index);
+    // ✅ REMOVED filename extraction - backend only needs imageUrl now
+    // const urlParts = imageUrl.split('/');
+    // const filename = urlParts[urlParts.length - 1];
     
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        router.push('/login');
-        return;
-      }
-      
-      // Extract filename from URL
-      const urlParts = imageUrl.split('/');
-      const filename = urlParts[urlParts.length - 1];
-      
-      // Send DELETE request to backend
-      const response = await fetch(`${BACKEND_URL}/auth/delete-image`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          imageUrl: imageUrl,
-          filename: filename 
-        }),
-      });
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Delete failed: ${response.status} ${errorText}`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        // Update local state to remove the image
-        const updatedImages = [...user.images];
-        updatedImages.splice(index, 1);
-        
-        setUser({
-          ...user,
-          images: updatedImages,
-          image_url: updatedImages[0] || ''
-        });
-        
-        alert('Photo deleted successfully!');
-      } else {
-        throw new Error(data.error || 'Failed to delete image');
-      }
-    } catch (error: any) {
-      console.error('Error deleting image:', error);
-      alert(`Failed to delete photo: ${error.message}`);
-      
-      // Even if backend fails, we can still remove from frontend state
-      // but inform the user it might still exist on server
-      const updatedImages = [...user.images || []];
+    // ✅ Send only imageUrl to backend (Cloudinary handles everything)
+    const response = await fetch(`${BACKEND_URL}/auth/delete-image`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ 
+        imageUrl: imageUrl  // ✅ Only send imageUrl, not filename
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Delete failed: ${response.status} ${errorText}`);
+    }
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Update local state to remove the image
+      const updatedImages = [...user.images];
       updatedImages.splice(index, 1);
       
       setUser({
-        ...user!,
+        ...user,
         images: updatedImages,
         image_url: updatedImages[0] || ''
       });
       
-      alert('Photo removed from your profile, but may still exist on the server.');
-    } finally {
-      setDeletingIndex(null);
+      alert('Photo deleted successfully!');
+    } else {
+      throw new Error(data.error || 'Failed to delete image');
     }
-  };
+  } catch (error: any) {
+    console.error('Error deleting image:', error);
+    alert(`Failed to delete photo: ${error.message}`);
+    
+    // Even if backend fails, we can still remove from frontend state
+    // but inform the user it might still exist on server
+    const updatedImages = [...user.images || []];
+    updatedImages.splice(index, 1);
+    
+    setUser({
+      ...user!,
+      images: updatedImages,
+      image_url: updatedImages[0] || ''
+    });
+    
+    alert('Photo removed from your profile, but may still exist on the server.');
+  } finally {
+    setDeletingIndex(null);
+  }
+};
 
   const handleServiceToggle = (service: string) => {
     if (!user) return;
