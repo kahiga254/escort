@@ -23,6 +23,9 @@ interface User {
   role: string;
   has_subscription: boolean;
   subscription_expiry?: string;
+  subscription_status?: 'active' | 'pending' | 'expired' | 'cancelled';
+  payment_date?: string;
+  activation_date?: string;
   stats?: {
     views: number;
     calls: number;
@@ -61,13 +64,42 @@ export default function DashboardPage() {
   const [uploading, setUploading] = useState(false);
   const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchUserData();
+    
+    // Check if user just returned from payment page
+    const checkPaymentReturn = () => {
+      const paymentReturn = localStorage.getItem('payment_return');
+      if (paymentReturn === 'true') {
+        console.log('User returned from payment, refreshing data...');
+        fetchUserData(true);
+        localStorage.removeItem('payment_return');
+      }
+    };
+    
+    checkPaymentReturn();
   }, []);
 
-  const fetchUserData = async () => {
+  useEffect(() => {
+    // Auto-refresh user data every 30 seconds if account is not active but has subscription
+    let interval: NodeJS.Timeout;
+    
+    if (user && user.has_subscription && !user.is_active) {
+      interval = setInterval(() => {
+        console.log('Auto-refreshing user data for pending activation...');
+        fetchUserData(false, true); // Silent refresh
+      }, 30000); // 30 seconds
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [user?.has_subscription, user?.is_active]);
+
+  const fetchUserData = async (forceRefresh = false, silent = false) => {
     const token = localStorage.getItem('token');
     
     if (!token) {
@@ -75,46 +107,80 @@ export default function DashboardPage() {
       return;
     }
 
-    setLoading(true);
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
-      const response = await fetch(`${BACKEND_URL}/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
+      // Clear cache if forced refresh
+      if (forceRefresh) {
+        localStorage.removeItem('user');
+      }
+
+      // Use minimal headers to avoid CORS issues
+      const headers: HeadersInit = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      };
+
+      // Add cache busting parameter if forcing refresh
+      const url = forceRefresh ? `${BACKEND_URL}/auth/me?t=${Date.now()}` : `${BACKEND_URL}/auth/me`;
+      
+      const response = await fetch(url, {
+        headers,
+        // Use fetch cache control instead of custom headers
+        cache: forceRefresh ? 'no-cache' : 'default',
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        console.log('User data fetched:', data);
-        
-        if (data.success && data.user) {
-          // Ensure images array exists
-          const images = Array.isArray(data.user.images) 
-            ? data.user.images 
-            : (data.user.image_url ? [data.user.image_url] : []);
-          
-          const userData = {
-            ...data.user,
-            images: images,
-            image_url: images[0] || data.user.image_url || '',
-            services: Array.isArray(data.user.services) ? data.user.services : []
-          };
-          setUser(userData);
-          localStorage.setItem('user', JSON.stringify(userData));
-        } else {
-          setError(data.error || 'Failed to fetch user data');
-        }
-      } else {
-        setError(`HTTP ${response.status}: Failed to fetch profile`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to fetch profile`);
       }
-    } catch (error) {
+
+      const data = await response.json();
+      console.log('User data fetched:', data);
+      
+      if (data.success && data.user) {
+        // Ensure images array exists
+        const images = Array.isArray(data.user.images) 
+          ? data.user.images 
+          : (data.user.image_url ? [data.user.image_url] : []);
+        
+        const userData = {
+          ...data.user,
+          images: images,
+          image_url: images[0] || data.user.image_url || '',
+          services: Array.isArray(data.user.services) ? data.user.services : [],
+          is_active: data.user.is_active || false,
+          has_subscription: data.user.has_subscription || false,
+          subscription_status: data.user.subscription_status || 'pending',
+          payment_date: data.user.payment_date || data.user.updatedAt || null,
+          activation_date: data.user.activation_date || data.user.updatedAt || null
+        };
+        
+        setUser(userData);
+        localStorage.setItem('user', JSON.stringify(userData));
+        
+        // Log activation status for debugging
+        console.log('Account Status:', {
+          is_active: userData.is_active,
+          has_subscription: userData.has_subscription,
+          subscription_status: userData.subscription_status,
+          payment_date: userData.payment_date,
+          activation_date: userData.activation_date
+        });
+        
+      } else {
+        throw new Error(data.error || 'Failed to fetch user data');
+      }
+    } catch (error: any) {
       console.error('Error fetching user data:', error);
-      setError('Network error. Please check your connection.');
+      setError(error.message || 'Network error. Please check your connection.');
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   };
 
@@ -378,6 +444,11 @@ export default function DashboardPage() {
     }
   };
 
+  const handleManualRefresh = async () => {
+    setRefreshing(true);
+    await fetchUserData(true);
+  };
+
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -394,22 +465,86 @@ export default function DashboardPage() {
     return user.images.length;
   };
 
-  if (loading) {
+  const getAccountStatus = () => {
+    if (!user) return { text: 'Loading...', color: 'gray' };
+    
+    if (user.is_active) {
+      return { 
+        text: 'Active', 
+        color: 'green',
+        badgeColor: 'bg-green-100 text-green-800',
+        bgColor: 'bg-green-50'
+      };
+    }
+    
+    if (user.has_subscription) {
+      return { 
+        text: 'Payment Received - Processing', 
+        color: 'blue',
+        badgeColor: 'bg-blue-100 text-blue-800',
+        bgColor: 'bg-blue-50'
+      };
+    }
+    
+    return { 
+      text: 'Inactive', 
+      color: 'yellow',
+      badgeColor: 'bg-yellow-100 text-yellow-800',
+      bgColor: 'bg-yellow-50'
+    };
+  };
+
+  const getActivationMessage = () => {
+    if (!user) return '';
+    
+    if (user.is_active) {
+      return 'Your account is active and visible to clients';
+    }
+    
+    if (user.has_subscription) {
+      if (user.payment_date) {
+        const paymentDate = new Date(user.payment_date);
+        const now = new Date();
+        const diffHours = Math.floor((now.getTime() - paymentDate.getTime()) / (1000 * 60 * 60));
+        
+        if (diffHours > 2) {
+          return `Payment received ${diffHours} hours ago. Activation is taking longer than expected.`;
+        } else if (diffHours > 1) {
+          return 'Payment received. Activation should complete shortly...';
+        } else {
+          return 'Payment verified! Your account will be activated within the next hour.';
+        }
+      }
+      return 'Payment received! Your account is being activated...';
+    }
+    
+    return 'Your account is pending activation';
+  };
+
+  const shouldShowActivateButton = () => {
+    if (!user) return false;
+    return !user.is_active && !user.has_subscription;
+  };
+
+  if (loading && !refreshing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your dashboard...</p>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center max-w-md">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Error Loading Dashboard</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button
-            onClick={fetchUserData}
+            onClick={() => fetchUserData(true)}
             className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 mr-4"
           >
             Retry
@@ -441,6 +576,8 @@ export default function DashboardPage() {
     );
   }
 
+  const accountStatus = getAccountStatus();
+
   return (
     <div className="min-h-screen bg-gray-50">
       {error && (
@@ -454,6 +591,16 @@ export default function DashboardPage() {
             <div className="ml-3">
               <p className="text-sm text-red-700 font-medium">{error}</p>
             </div>
+            <div className="ml-auto pl-3">
+              <button
+                onClick={() => setError(null)}
+                className="text-red-500 hover:text-red-700"
+              >
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -465,17 +612,75 @@ export default function DashboardPage() {
               <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
               <p className="text-sm text-gray-600">Welcome back, {user.first_name}!</p>
             </div>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
-            >
-              Logout
-            </button>
+            <div className="flex items-center space-x-4">
+              {user.has_subscription && !user.is_active && (
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={refreshing}
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center disabled:opacity-50"
+                >
+                  {refreshing ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Check Status
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Activation Alert Banner */}
+        {user.has_subscription && !user.is_active && (
+          <div className="mb-8 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="ml-4 flex-1">
+                <h3 className="text-lg font-semibold text-blue-900">Payment Successfully Received!</h3>
+                <p className="text-blue-700 mt-1">
+                  Your payment has been verified. We're currently processing your account activation.
+                  {user.payment_date && (
+                    <span className="block text-sm text-blue-600 mt-1">
+                      Payment received: {new Date(user.payment_date).toLocaleDateString()} at {new Date(user.payment_date).toLocaleTimeString()}
+                    </span>
+                  )}
+                </p>
+                <div className="mt-4 flex items-center">
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div className="bg-blue-600 h-2 rounded-full animate-pulse" style={{ width: '75%' }}></div>
+                  </div>
+                  <span className="ml-4 text-sm font-medium text-blue-700">Processing...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow p-6">
             <div className="flex items-center">
@@ -717,28 +922,69 @@ export default function DashboardPage() {
               {/* Account Status */}
               <div className="pt-6 border-t border-gray-200">
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">Account Status</h3>
-                <div className={`p-4 rounded-lg ${user.is_active ? 'bg-green-50' : 'bg-yellow-50'}`}>
+                <div className={`p-4 rounded-lg ${accountStatus.bgColor} border`} style={{ borderColor: `var(--${accountStatus.color}-200)` }}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium">{user.is_active ? 'Active' : 'Inactive'}</p>
+                      <p className="font-medium">{accountStatus.text}</p>
                       <p className="text-sm text-gray-600 mt-1">
-                        {user.is_active 
-                          ? 'Your account is active and visible to clients' 
-                          : 'Your account is pending activation'}
+                        {getActivationMessage()}
                       </p>
+                      {user.payment_date && !user.is_active && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Payment made: {new Date(user.payment_date).toLocaleString()}
+                        </p>
+                      )}
+                      {user.activation_date && user.is_active && (
+                        <p className="text-xs text-green-600 mt-1">
+                          Activated: {new Date(user.activation_date).toLocaleString()}
+                        </p>
+                      )}
                     </div>
-                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${user.is_active ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                      {user.is_active ? '✓ Active' : 'Pending'}
+                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${accountStatus.badgeColor}`}>
+                      {user.is_active 
+                        ? '✓ Active' 
+                        : user.has_subscription 
+                          ? '✓ Payment Complete' 
+                          : 'Pending'}
                     </div>
                   </div>
                   
-                  {!user.is_active && (
+                  {/* Activation Button */}
+                  {shouldShowActivateButton() ? (
                     <Link href="/activate">
                       <button className="w-full mt-4 py-2 bg-gradient-to-r from-red-600 to-orange-600 text-white rounded-lg hover:from-red-700 hover:to-orange-700 transition-all">
                         Activate Now
                       </button>
                     </Link>
-                  )}
+                  ) : user.has_subscription && !user.is_active ? (
+                    <div className="mt-4">
+                      <button
+                        onClick={handleManualRefresh}
+                        disabled={refreshing}
+                        className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center disabled:opacity-50"
+                      >
+                        {refreshing ? (
+                          <>
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Checking Status...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            Refresh Activation Status
+                          </>
+                        )}
+                      </button>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        Activation may take a few minutes after payment
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
