@@ -3,6 +3,8 @@ package main
 import (
 	"log"
 	"os"
+	"regexp"
+	"strings"
 
 	"escort/database"
 	"escort/routes"
@@ -20,15 +22,15 @@ func main() {
 	// Connect to the database
 	database.ConnectDB()
 
-	// Create Gin router - minimal setup
+	// Create Gin router
 	router := gin.New()
-	router.Use(gin.Logger())   // Optional: request logging
-	router.Use(gin.Recovery()) // Optional: panic recovery
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
 
-	// CORS middleware - essential for frontend-backend communication
+	// CORS middleware - PRODUCTION READY
 	router.Use(CORSMiddleware())
 
-	// 🔥🔥🔥 ADD THIS LINE: Serve static files from uploads directory 🔥🔥🔥
+	// Serve static files
 	router.Static("/uploads", "./uploads")
 
 	// Setup all routes
@@ -44,10 +46,6 @@ func main() {
 	log.Printf("📝 API Endpoints:")
 	log.Printf("   POST   http://localhost:%s/auth/register", port)
 	log.Printf("   POST   http://localhost:%s/auth/login", port)
-	log.Printf("   POST   http://localhost:%s/auth/upload-images", port)
-	log.Printf("   PUT    http://localhost:%s/auth/update-profile", port)
-	log.Printf("   PUT    http://localhost:%s/admin/approve/:id", port)
-	log.Printf("   DELETE http://localhost:%s/admin/delete/:id", port)
 
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
@@ -55,7 +53,7 @@ func main() {
 }
 
 func setupRoutes(router *gin.Engine) {
-	// Simple health check
+	// Health check
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"service": "Escort API",
@@ -68,80 +66,85 @@ func setupRoutes(router *gin.Engine) {
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
 
-	// 🔥 ADD OPTIONS HANDLERS FOR CORS PREFLIGHT 🔥
-	router.OPTIONS("/users", handleOptions)
-	router.OPTIONS("/search", handleOptions)
-	router.OPTIONS("/location/:location", handleOptions)
-	router.OPTIONS("/subscription/plans", handleOptions)
-	router.OPTIONS("/mpesa/callback", handleOptions)
-	router.OPTIONS("/auth/login", handleOptions)
-	router.OPTIONS("/auth/register", handleOptions)
-	router.OPTIONS("/auth/subscribe", handleOptions)
-	router.OPTIONS("/auth/subscription/status", handleOptions)
-	router.OPTIONS("/auth/subscription/check-status", handleOptions)
-	router.OPTIONS("/auth/upload-images", handleOptions)
-	router.OPTIONS("/auth/update-profile", handleOptions)
-	router.OPTIONS("/admin/approve/:id", handleOptions)
-	router.OPTIONS("/admin/delete/:id", handleOptions)
-
-	// Setup your existing routes
+	// Setup routes
 	routes.AuthRoutes(router)
 	routes.AdminRoutes(router)
 }
 
-// Handler for OPTIONS requests
-func handleOptions(c *gin.Context) {
-	log.Printf("OPTIONS preflight request for: %s", c.Request.URL.Path)
-
-	c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
-	c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-	c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-	c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Origin, X-Requested-With")
-	c.Status(204) // No Content
-}
-
+// PRODUCTION CORS Middleware
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		log.Printf("CORS Middleware: Request from Origin: %s", c.Request.Header.Get("Origin"))
+		// Get allowed origins from environment variable or use defaults
+		allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
+		var allowedOrigins []string
 
-		allowedOrigins := []string{
-			"http://localhost:3000",
-			"http://localhost:3001",
-			"http://127.0.0.1:3000",
+		if allowedOriginsStr == "" {
+			// Default origins for development
+			allowedOrigins = []string{
+				"http://localhost:3000",
+				"http://localhost:3001",
+				"http://127.0.0.1:3000",
+				"http://127.0.0.1:3001",
+			}
+		} else {
+			// Split comma-separated origins from environment variable
+			allowedOrigins = strings.Split(allowedOriginsStr, ",")
 		}
+
+		// Add your production domains to the list
+		productionDomains := []string{
+			"https://escort-crr9.vercel.app",
+			"https://escort-*-kahiga254s-projects.vercel.app", // Wildcard for all Vercel previews
+			"https://escort-git-master-kahiga254s-projects.vercel.app",
+			"https://escort-2smjynczz-kahiga254s-projects.vercel.app",
+			"https://escort.vercel.app",        // If you set up a custom domain
+			"https://escort-vcix.onrender.com", // Your backend
+		}
+
+		// Combine default/production domains
+		allAllowedOrigins := append(allowedOrigins, productionDomains...)
 
 		origin := c.Request.Header.Get("Origin")
 
-		// Check if the origin is in the allowed list
+		// Check if origin is in allowed list
 		allowed := false
-		for _, o := range allowedOrigins {
-			if o == origin {
+		for _, allowedOrigin := range allAllowedOrigins {
+			// Support wildcard subdomains
+			if strings.Contains(allowedOrigin, "*") {
+				pattern := strings.ReplaceAll(allowedOrigin, "*", ".*")
+				if matched, _ := regexp.MatchString(pattern, origin); matched {
+					allowed = true
+					break
+				}
+			} else if allowedOrigin == origin {
 				allowed = true
 				break
 			}
 		}
 
-		// Set the appropriate origin header
-		if origin != "" && allowed {
+		// Set CORS headers
+		if allowed {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
-			// For development, you can allow all origins
-			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		} else if origin != "" {
+			// Log unauthorized origin attempts (for security monitoring)
+			log.Printf("CORS: Blocked origin: %s", origin)
 		}
 
-		// Required headers - ALWAYS SET THESE
+		// Always set these headers
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE, PATCH")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Origin, Cache-Control, X-Requested-With")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400") // 24 hours cache for preflight
 
 		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
-			log.Printf("CORS: Handling OPTIONS preflight request")
 			c.AbortWithStatus(204)
 			return
 		}
 
-		log.Printf("CORS Headers Set: %v", c.Writer.Header())
 		c.Next()
 	}
 }
+
+// Add regexp import at top if using wildcard pattern
+// import "regexp"
