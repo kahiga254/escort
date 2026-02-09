@@ -1,19 +1,14 @@
 import type { Metadata } from "next";
-import { Inter} from 'next/font/google';
+import { Inter } from 'next/font/google';
 import Navbar from "./components/Navbar";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ['latin']});
+// REMOVED: Geist imports - they're not available in Next.js 14.2.5
+// Use Inter instead which is built into Next.js
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const inter = Inter({ 
+  subsets: ['latin'],
+  variable: '--font-inter', // Optional: CSS variable
 });
 
 export const metadata: Metadata = {
@@ -74,7 +69,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <Navbar />
         <main>{children}</main>
-                <script dangerouslySetInnerHTML={{
+        <script dangerouslySetInnerHTML={{
           __html: `
             // Remove Next.js error overlay
             setInterval(() => {
