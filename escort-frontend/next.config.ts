@@ -4,10 +4,17 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   
-  // REMOVE reactCompiler if you're not using React 19 compiler
-  // reactCompiler: true,  // Comment out or delete this line
+  // CRITICAL: ADD THIS to fix UserCard images
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**', // Allows all external images
+      },
+    ],
+  },
   
-  // Add this to disable Next.js dev overlay
+  // Keep your existing compiler config
   compiler: {
     reactRemoveProperties: true,
   },
