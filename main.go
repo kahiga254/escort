@@ -3,8 +3,6 @@ package main
 import (
 	"log"
 	"os"
-	"regexp"
-	"strings"
 
 	"escort/database"
 	"escort/routes"
@@ -72,71 +70,17 @@ func setupRoutes(router *gin.Engine) {
 }
 
 // PRODUCTION CORS Middleware
+// SIMPLE WORKING CORS Middleware
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get allowed origins from environment variable or use defaults
-		allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
-		var allowedOrigins []string
-
-		if allowedOriginsStr == "" {
-			// Default origins for development
-			allowedOrigins = []string{
-				"http://localhost:3000",
-				"http://localhost:3001",
-				"http://127.0.0.1:3000",
-				"http://127.0.0.1:3001",
-			}
-		} else {
-			// Split comma-separated origins from environment variable
-			allowedOrigins = strings.Split(allowedOriginsStr, ",")
-		}
-
-		// Add your production domains to the list
-		productionDomains := []string{
-			"https://escort-crr9.vercel.app",
-			"https://escort-*-kahiga254s-projects.vercel.app", // Wildcard for all Vercel previews
-			"https://escort-git-master-kahiga254s-projects.vercel.app",
-			"https://escort-2smjynczz-kahiga254s-projects.vercel.app",
-			"https://escort.vercel.app",        // If you set up a custom domain
-			"https://escort-vcix.onrender.com", // Your backend
-		}
-
-		// Combine default/production domains
-		allAllowedOrigins := append(allowedOrigins, productionDomains...)
-
-		origin := c.Request.Header.Get("Origin")
-
-		// Check if origin is in allowed list
-		allowed := false
-		for _, allowedOrigin := range allAllowedOrigins {
-			// Support wildcard subdomains
-			if strings.Contains(allowedOrigin, "*") {
-				pattern := strings.ReplaceAll(allowedOrigin, "*", ".*")
-				if matched, _ := regexp.MatchString(pattern, origin); matched {
-					allowed = true
-					break
-				}
-			} else if allowedOrigin == origin {
-				allowed = true
-				break
-			}
-		}
-
-		// Set CORS headers
-		if allowed {
-			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-		} else if origin != "" {
-			// Log unauthorized origin attempts (for security monitoring)
-			log.Printf("CORS: Blocked origin: %s", origin)
-		}
-
-		// Always set these headers
+		// ALWAYS allow all origins for now
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Accept, Origin, Cache-Control, X-Requested-With")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		c.Writer.Header().Set("Access-Control-Max-Age", "86400") // 24 hours cache for preflight
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		c.Writer.Header().Set("Vary", "Origin")
 
-		// Handle preflight requests
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -146,5 +90,5 @@ func CORSMiddleware() gin.HandlerFunc {
 	}
 }
 
-// Add regexp import at top if using wildcard pattern
+// Add regexp import at the top
 // import "regexp"
