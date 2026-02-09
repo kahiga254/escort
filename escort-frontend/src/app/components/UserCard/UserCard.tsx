@@ -11,6 +11,7 @@ interface UserCardProps {
 
 export default function UserCard({ user }: UserCardProps) {
   const [showContact, setShowContact] = useState<boolean>(false);
+  const [imgError, setImgError] = useState<boolean>(false);
 
   const handleContact = (e: React.MouseEvent): void => {
     e.preventDefault(); // Prevent Link navigation
