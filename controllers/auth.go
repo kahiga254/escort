@@ -46,16 +46,17 @@ func RegisterUser(c *gin.Context) {
 
 	// Create a registration DTO that matches frontend
 	type RegisterRequest struct {
-		FirstName         string `json:"firstName" binding:"required"`
-		LastName          string `json:"lastName" binding:"required"`
-		Email             string `json:"email" binding:"required,email"`
-		PhoneNo           string `json:"phoneNo" binding:"required"`
-		Password          string `json:"password" binding:"required"`
-		Gender            string `json:"gender" binding:"required"`
-		SexualOrientation string `json:"sexualOrientation"`
-		Age               int    `json:"age"`
-		Nationality       string `json:"nationality"`
-		Location          string `json:"location" binding:"required"`
+		FirstName         string   `json:"firstName" binding:"required"`
+		LastName          string   `json:"lastName" binding:"required"`
+		Email             string   `json:"email" binding:"required,email"`
+		PhoneNo           string   `json:"phoneNo" binding:"required"`
+		Password          string   `json:"password" binding:"required"`
+		Gender            string   `json:"gender" binding:"required"`
+		SexualOrientation string   `json:"sexualOrientation"`
+		Age               int      `json:"age"`
+		Nationality       string   `json:"nationality"`
+		Location          string   `json:"location" binding:"required"`
+		Services          []string `json:"services"`
 	}
 
 	var req RegisterRequest
@@ -99,12 +100,16 @@ func RegisterUser(c *gin.Context) {
 		PhoneNo:            req.PhoneNo,
 		Password:           string(hashedPassword),
 		Location:           req.Location,
+		Gender:             req.Gender,
+		SexualOrientation:  req.SexualOrientation,
+		Age:                req.Age,
+		Nationality:        req.Nationality,
+		Services:           req.Services, // ✅ ADDED
 		IsActive:           false,
 		Role:               "user",
 		HasSubscription:    false,
 		SubscriptionExpiry: time.Time{},
 		LastPaymentDate:    time.Time{},
-		// Store additional fields in a map or separate collection if needed
 	}
 
 	_, err = database.UserCollection.InsertOne(context.TODO(), user)
