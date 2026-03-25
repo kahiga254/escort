@@ -104,7 +104,7 @@ func RegisterUser(c *gin.Context) {
 		SexualOrientation:  req.SexualOrientation,
 		Age:                req.Age,
 		Nationality:        req.Nationality,
-		Services:           req.Services, // ✅ ADDED
+		Services:           req.Services,
 		IsActive:           false,
 		Role:               "user",
 		HasSubscription:    false,
