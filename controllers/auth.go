@@ -110,6 +110,8 @@ func RegisterUser(c *gin.Context) {
 		HasSubscription:    false,
 		SubscriptionExpiry: time.Time{},
 		LastPaymentDate:    time.Time{},
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
 	}
 
 	_, err = database.UserCollection.InsertOne(context.TODO(), user)
