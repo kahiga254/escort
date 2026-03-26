@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import UsersTable from '../components/UsersTable';
 
-const API_BASE_URL = '${process.env.NEXT_PUBLIC_API_URL}/users';
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_URL}/users`;
 
 export default function UsersPage() {
   const searchParams = useSearchParams();

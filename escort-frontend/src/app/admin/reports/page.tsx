@@ -26,7 +26,7 @@ export default function SubscriptionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const router = useRouter();
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || '${process.env.NEXT_PUBLIC_API_URL}';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   useEffect(() => {
     fetchSubscriptions();

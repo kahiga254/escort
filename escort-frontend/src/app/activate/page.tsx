@@ -15,7 +15,7 @@ interface SubscriptionPlan {
   is_popular?: boolean;
 }
 
-const BACKEND_URL = '${process.env.NEXT_PUBLIC_API_URL}';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function ActivationPage() {
   const router = useRouter();

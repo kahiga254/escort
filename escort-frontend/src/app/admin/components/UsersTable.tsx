@@ -87,7 +87,7 @@ export default function UsersTable({
     setActionLoading(userId);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://${process.env.NEXT_PUBLIC_API_URL}/admin/users/${userId}/status`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/admin/users/${userId}/status`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

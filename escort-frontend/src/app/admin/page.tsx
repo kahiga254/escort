@@ -6,7 +6,7 @@ import DashboardStats from './components/DashboardStats';
 import RecentUsers from './components/RecentUsers';
 import RecentSubscriptions from './components/RecentSubscriptions';
 
-const API_BASE_URL = '${process.env.NEXT_PUBLIC_API_URL}';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<any>(null);

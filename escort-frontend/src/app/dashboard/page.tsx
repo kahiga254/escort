@@ -52,7 +52,7 @@ const genderOptions = ['Male', 'Female', 'Non-binary', 'Other'];
 const orientationOptions = ['Straight', 'Gay', 'Lesbian', 'Bisexual', 'Pansexual', 'Asexual'];
 const nationalityOptions = ['Kenyan', 'Ugandan', 'Tanzanian', 'Rwandan', 'Burundian', 'Other'];
 
-const BACKEND_URL = '${process.env.NEXT_PUBLIC_API_URL}';
+const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL;
 const MAX_IMAGES = 5;
 
 export default function DashboardPage() {
