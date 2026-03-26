@@ -13,7 +13,7 @@ interface SubscriptionData {
   mpesa_receipt?: string;
 }
 
-const BACKEND_URL = 'https://escort-vcix.onrender.com';
+const BACKEND_URL = '${process.env.NEXT_PUBLIC_API_URL}';
 
 export default function PaymentStatusPage() {
   const router = useRouter();

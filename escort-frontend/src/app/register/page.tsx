@@ -157,7 +157,7 @@ export default function RegisterPage() {
       // Format phone number
       const formattedPhone = formatPhoneNumber(formData.phoneNo);
 
-      const response = await fetch('https://escort-vcix.onrender.com/auth/register', {
+      const response = await fetch('${process.env.NEXT_PUBLIC_API_URL}/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
