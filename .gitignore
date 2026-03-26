@@ -1,0 +1,14 @@
+# Environment variables - NEVER push these
+.env
+.env.local
+
+# Go binary
+escort
+*.exe
+
+# Go build cache
+/tmp
+
+# OS files
+.DS_Store
+Thumbs.db
