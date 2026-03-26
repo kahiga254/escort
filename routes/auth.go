@@ -306,15 +306,27 @@ func AuthRoutes(route *gin.Engine) {
 				return
 			}
 
-			// Initialize Cloudinary (set these as environment variables in Render)
+			// Initialize Cloudinary
 			cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
 			apiKey := os.Getenv("CLOUDINARY_API_KEY")
 			apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
 
+			// ✅ Debug logs - will show in Render logs
+			fmt.Printf("☁️ Cloudinary Config Check:\n")
+			fmt.Printf("   CLOUD_NAME: '%s'\n", cloudName)
+			fmt.Printf("   API_KEY: '%s'\n", apiKey)
+			fmt.Printf("   API_SECRET length: %d\n", len(apiSecret))
+
 			if cloudName == "" || apiKey == "" || apiSecret == "" {
-				c.JSON(500, gin.H{"error": "Cloudinary configuration missing"})
+				fmt.Println("❌ Cloudinary credentials missing!")
+				c.JSON(500, gin.H{
+					"error": fmt.Sprintf("Cloudinary configuration missing - Name:'%s' Key:'%s' Secret_len:%d",
+						cloudName, apiKey, len(apiSecret)),
+				})
 				return
 			}
+
+			fmt.Println("✅ Cloudinary credentials found, attempting upload...")
 
 			// Create Cloudinary instance
 			cld, err := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
