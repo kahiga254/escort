@@ -361,10 +361,21 @@ func AuthRoutes(route *gin.Engine) {
 				})
 
 				if err != nil {
+					fmt.Printf("❌ Cloudinary upload failed: %v\n", err)
 					c.JSON(500, gin.H{"error": "Failed to upload to Cloudinary: " + err.Error()})
 					return
 				}
 
+				// ✅ Debug - log the full result
+				fmt.Printf("✅ Upload result - SecureURL: '%s'\n", uploadResult.SecureURL)
+				fmt.Printf("✅ Upload result - PublicID: '%s'\n", uploadResult.PublicID)
+				fmt.Printf("✅ Upload result - Error: '%v'\n", uploadResult.Error)
+
+				if uploadResult.SecureURL == "" {
+					fmt.Printf("❌ SecureURL is empty! Full result: %+v\n", uploadResult)
+					c.JSON(500, gin.H{"error": "Cloudinary returned empty URL"})
+					return
+				}
 				uploadedImageUrls = append(uploadedImageUrls, uploadResult.SecureURL)
 			}
 
