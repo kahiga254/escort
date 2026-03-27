@@ -1,21 +1,19 @@
 package routes
 
 import (
+	"bytes"
 	"context"
 	"escort/controllers"
 	"escort/database"
 	"escort/middleware"
 	"escort/models"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -279,7 +277,7 @@ func AuthRoutes(route *gin.Engine) {
 
 			userObjID, _ := primitive.ObjectIDFromHex(userID.(string))
 
-			// First, get current user to check existing images
+			// Get current user to check existing images
 			var existingUser map[string]interface{}
 			err = database.UserCollection.FindOne(context.Background(), bson.M{"_id": userObjID}).Decode(&existingUser)
 			if err != nil {
@@ -308,40 +306,17 @@ func AuthRoutes(route *gin.Engine) {
 				return
 			}
 
-			// Initialize Backblaze B2 (S3 compatible) - AWS SDK V2 with Transfer Manager
-			b2KeyID := os.Getenv("B2_KEY_ID")
-			b2AppKey := os.Getenv("B2_APP_KEY")
-			b2Endpoint := os.Getenv("B2_ENDPOINT")
-			b2Bucket := os.Getenv("B2_BUCKET")
+			// Initialize Supabase Storage
+			supabaseURL := os.Getenv("SUPABASE_URL")
+			supabaseKey := os.Getenv("SUPABASE_SERVICE_KEY")
+			supabaseBucket := "profiles"
 
-			fmt.Printf("☁️ B2 Config - Endpoint: %s, Bucket: %s\n", b2Endpoint, b2Bucket)
+			fmt.Printf("☁️ Supabase Config - URL: %s\n", supabaseURL)
 
-			if b2KeyID == "" || b2AppKey == "" || b2Endpoint == "" || b2Bucket == "" {
-				c.JSON(500, gin.H{"error": "B2 storage configuration missing"})
+			if supabaseURL == "" || supabaseKey == "" {
+				c.JSON(500, gin.H{"error": "Supabase configuration missing"})
 				return
 			}
-
-			// Load AWS config for Backblaze B2
-			cfg, err := config.LoadDefaultConfig(context.TODO(),
-				config.WithRegion("us-east-005"),
-				config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(b2KeyID, b2AppKey, "")),
-			)
-			if err != nil {
-				c.JSON(500, gin.H{"error": "Failed to load config: " + err.Error()})
-				return
-			}
-
-			// Create S3 client with custom endpoint
-			s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
-				o.BaseEndpoint = aws.String("https://" + b2Endpoint)
-				o.UsePathStyle = true // Required for Backblaze B2
-			})
-
-			// Create Transfer Manager client
-			tmClient := transfermanager.New(s3Client, func(o *transfermanager.Options) {
-				o.PartSizeBytes = 64 * 1024 * 1024 // 64MB parts for large files
-				o.Concurrency = 3                  // Upload 3 parts concurrently
-			})
 
 			var uploadedImageUrls []string
 
@@ -353,38 +328,66 @@ func AuthRoutes(route *gin.Engine) {
 				}
 				defer src.Close()
 
-				// Create unique filename
-				timestamp := time.Now().UnixNano()
-				safeName := strings.ReplaceAll(file.Filename, " ", "_")
-				fileName := fmt.Sprintf("profiles/%s/%d_%s", userID.(string), timestamp, safeName)
-
-				// Upload to Backblaze B2 using Transfer Manager v2
-				result, err := tmClient.UploadObject(context.TODO(), &transfermanager.UploadObjectInput{
-					Bucket:      aws.String(b2Bucket),
-					Key:         aws.String(fileName),
-					Body:        src,
-					ContentType: aws.String(file.Header.Get("Content-Type")),
-				})
+				// Read file content
+				fileBytes, err := io.ReadAll(src)
 				if err != nil {
-					fmt.Printf("❌ B2 upload failed: %v\n", err)
-					c.JSON(500, gin.H{"error": "Failed to upload image: " + err.Error()})
+					c.JSON(500, gin.H{"error": "Failed to read file: " + err.Error()})
 					return
 				}
 
-				fmt.Printf("✅ B2 upload success! Location: %s\n", aws.ToString(result.Location))
+				// Create unique filename
+				timestamp := time.Now().UnixNano()
+				safeName := strings.ReplaceAll(file.Filename, " ", "_")
+				fileName := fmt.Sprintf("%s/%d_%s", userID.(string), timestamp, safeName)
+
+				// Get content type
+				contentType := file.Header.Get("Content-Type")
+				if contentType == "" {
+					contentType = "image/jpeg"
+				}
+
+				// Upload to Supabase Storage
+				uploadURL := fmt.Sprintf("%s/storage/v1/object/%s/%s", supabaseURL, supabaseBucket, fileName)
+
+				req, err := http.NewRequest("POST", uploadURL, bytes.NewReader(fileBytes))
+				if err != nil {
+					c.JSON(500, gin.H{"error": "Failed to create upload request: " + err.Error()})
+					return
+				}
+
+				req.Header.Set("Authorization", "Bearer "+supabaseKey)
+				req.Header.Set("Content-Type", contentType)
+				req.Header.Set("x-upsert", "true")
+
+				client := &http.Client{}
+				resp, err := client.Do(req)
+				if err != nil {
+					c.JSON(500, gin.H{"error": "Failed to upload to Supabase: " + err.Error()})
+					return
+				}
+				defer resp.Body.Close()
+
+				respBody, _ := io.ReadAll(resp.Body)
+				fmt.Printf("☁️ Supabase response status: %d, body: %s\n", resp.StatusCode, string(respBody))
+
+				if resp.StatusCode != 200 && resp.StatusCode != 201 {
+					c.JSON(500, gin.H{"error": fmt.Sprintf("Supabase upload failed: %s", string(respBody))})
+					return
+				}
 
 				// Build public URL
-				publicURL := fmt.Sprintf("https://f005.backblazeb2.com/file/%s/%s", b2Bucket, fileName)
-				fmt.Printf("✅ B2 upload success! Public URL: %s\n", publicURL)
+				publicURL := fmt.Sprintf("%s/storage/v1/object/public/%s/%s", supabaseURL, supabaseBucket, fileName)
+				fmt.Printf("✅ Supabase upload success! URL: %s\n", publicURL)
 				uploadedImageUrls = append(uploadedImageUrls, publicURL)
 			}
+
 			// Combine existing images with new ones
 			allImages := append(existingImages, uploadedImageUrls...)
 
 			// Update user with all images
 			updateData := bson.M{
 				"images":     allImages,
-				"image_url":  allImages[0], // First image as main
+				"image_url":  allImages[0],
 				"updated_at": time.Now(),
 			}
 
