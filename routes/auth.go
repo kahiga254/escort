@@ -11,8 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudinary/cloudinary-go/v2"
-	"github.com/cloudinary/cloudinary-go/v2/api/uploader"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -241,8 +244,7 @@ func AuthRoutes(route *gin.Engine) {
 			})
 		})
 
-		// Add this route in your AuthRoutes function, inside the protected group:
-
+		// ==================== FIXED UPLOAD-IMAGES ROUTE (AWS SDK V2) ====================
 		protected.POST("/upload-images", func(c *gin.Context) {
 			userID, exists := c.Get("userID")
 			if !exists {
@@ -306,40 +308,44 @@ func AuthRoutes(route *gin.Engine) {
 				return
 			}
 
-			// Initialize Cloudinary
-			cloudName := os.Getenv("CLOUDINARY_CLOUD_NAME")
-			apiKey := os.Getenv("CLOUDINARY_API_KEY")
-			apiSecret := os.Getenv("CLOUDINARY_API_SECRET")
+			// Initialize Backblaze B2 (S3 compatible) - AWS SDK V2 with Transfer Manager
+			b2KeyID := os.Getenv("B2_KEY_ID")
+			b2AppKey := os.Getenv("B2_APP_KEY")
+			b2Endpoint := os.Getenv("B2_ENDPOINT")
+			b2Bucket := os.Getenv("B2_BUCKET")
 
-			// ✅ Debug logs - will show in Render logs
-			fmt.Printf("☁️ Cloudinary Config Check:\n")
-			fmt.Printf("   CLOUD_NAME: '%s'\n", cloudName)
-			fmt.Printf("   API_KEY: '%s'\n", apiKey)
-			fmt.Printf("   API_SECRET length: %d\n", len(apiSecret))
+			fmt.Printf("☁️ B2 Config - Endpoint: %s, Bucket: %s\n", b2Endpoint, b2Bucket)
 
-			if cloudName == "" || apiKey == "" || apiSecret == "" {
-				fmt.Println("❌ Cloudinary credentials missing!")
-				c.JSON(500, gin.H{
-					"error": fmt.Sprintf("Cloudinary configuration missing - Name:'%s' Key:'%s' Secret_len:%d",
-						cloudName, apiKey, len(apiSecret)),
-				})
+			if b2KeyID == "" || b2AppKey == "" || b2Endpoint == "" || b2Bucket == "" {
+				c.JSON(500, gin.H{"error": "B2 storage configuration missing"})
 				return
 			}
 
-			fmt.Println("✅ Cloudinary credentials found, attempting upload...")
-
-			// Create Cloudinary instance
-			cld, err := cloudinary.NewFromParams(cloudName, apiKey, apiSecret)
+			// Load AWS config for Backblaze B2
+			cfg, err := config.LoadDefaultConfig(context.TODO(),
+				config.WithRegion("us-east-005"),
+				config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(b2KeyID, b2AppKey, "")),
+			)
 			if err != nil {
-				c.JSON(500, gin.H{"error": "Failed to initialize Cloudinary: " + err.Error()})
+				c.JSON(500, gin.H{"error": "Failed to load config: " + err.Error()})
 				return
 			}
+
+			// Create S3 client with custom endpoint
+			s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+				o.BaseEndpoint = aws.String("https://" + b2Endpoint)
+				o.UsePathStyle = true // Required for Backblaze B2
+			})
+
+			// Create Transfer Manager client
+			tmClient := transfermanager.New(s3Client, func(o *transfermanager.Options) {
+				o.PartSizeBytes = 64 * 1024 * 1024 // 64MB parts for large files
+				o.Concurrency = 3                  // Upload 3 parts concurrently
+			})
 
 			var uploadedImageUrls []string
-			ctx := context.Background()
 
 			for _, file := range files {
-				// Open the uploaded file
 				src, err := file.Open()
 				if err != nil {
 					c.JSON(500, gin.H{"error": "Failed to open file: " + err.Error()})
@@ -347,38 +353,30 @@ func AuthRoutes(route *gin.Engine) {
 				}
 				defer src.Close()
 
-				// Create unique public ID
+				// Create unique filename
 				timestamp := time.Now().UnixNano()
 				safeName := strings.ReplaceAll(file.Filename, " ", "_")
-				publicID := fmt.Sprintf("escort_app/%s/%d_%s", userID.(string), timestamp, safeName)
+				fileName := fmt.Sprintf("profiles/%s/%d_%s", userID.(string), timestamp, safeName)
 
-				// Upload to Cloudinary
-				uploadResult, err := cld.Upload.Upload(ctx, src, uploader.UploadParams{
-					PublicID:       publicID,
-					Folder:         "escort_app/profiles",
-					Transformation: "f_auto,q_auto", // Auto format and quality
-					ResourceType:   "image",
+				// Upload to Backblaze B2 using Transfer Manager v2
+				result, err := tmClient.UploadObject(context.TODO(), &transfermanager.UploadObjectInput{
+					Bucket:      aws.String(b2Bucket),
+					Key:         aws.String(fileName),
+					Body:        src,
+					ContentType: aws.String(file.Header.Get("Content-Type")),
 				})
-
 				if err != nil {
-					fmt.Printf("❌ Cloudinary upload failed: %v\n", err)
-					c.JSON(500, gin.H{"error": "Failed to upload to Cloudinary: " + err.Error()})
+					fmt.Printf("❌ B2 upload failed: %v\n", err)
+					c.JSON(500, gin.H{"error": "Failed to upload image: " + err.Error()})
 					return
 				}
 
-				// ✅ Debug - log the full result
-				fmt.Printf("✅ Upload result - SecureURL: '%s'\n", uploadResult.SecureURL)
-				fmt.Printf("✅ Upload result - PublicID: '%s'\n", uploadResult.PublicID)
-				fmt.Printf("✅ Upload result - Error: '%v'\n", uploadResult.Error)
+				fmt.Printf("✅ B2 upload success! Location: %s\n", aws.ToString(result.Location))
 
-				if uploadResult.SecureURL == "" {
-					fmt.Printf("❌ SecureURL is empty! Full result: %+v\n", uploadResult)
-					c.JSON(500, gin.H{"error": "Cloudinary returned empty URL"})
-					return
-				}
-				uploadedImageUrls = append(uploadedImageUrls, uploadResult.SecureURL)
+				// Build public URL
+				publicURL := fmt.Sprintf("https://%s/%s/%s", b2Endpoint, b2Bucket, fileName)
+				uploadedImageUrls = append(uploadedImageUrls, publicURL)
 			}
-
 			// Combine existing images with new ones
 			allImages := append(existingImages, uploadedImageUrls...)
 
