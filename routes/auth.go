@@ -374,7 +374,8 @@ func AuthRoutes(route *gin.Engine) {
 				fmt.Printf("✅ B2 upload success! Location: %s\n", aws.ToString(result.Location))
 
 				// Build public URL
-				publicURL := fmt.Sprintf("https://%s/%s/%s", b2Endpoint, b2Bucket, fileName)
+				publicURL := fmt.Sprintf("https://f005.backblazeb2.com/file/%s/%s", b2Bucket, fileName)
+				fmt.Printf("✅ B2 upload success! Public URL: %s\n", publicURL)
 				uploadedImageUrls = append(uploadedImageUrls, publicURL)
 			}
 			// Combine existing images with new ones
