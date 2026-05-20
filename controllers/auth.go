@@ -523,7 +523,7 @@ func GetUsersByLocation(c *gin.Context) {
 // GetSubscriptionPlans - Get all available subscription plans
 func GetSubscriptionPlans(c *gin.Context) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// Get only active plans
@@ -559,7 +559,7 @@ func GetSubscriptionPlans(c *gin.Context) {
 // Subscribe - Initiate sunscription payment
 func Subscribe(c *gin.Context) {
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	// Get user from context (set by auth middleware)
 	userID, exists := c.Get("userID")

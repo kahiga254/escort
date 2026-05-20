@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"escort/controllers"
 	"escort/database"
 	"escort/routes"
 
@@ -20,19 +21,25 @@ func main() {
 	// Connect to the database
 	database.ConnectDB()
 
+	// Get MongoDB database instance
+	db := database.GetDB()
+
 	// Create Gin router
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	// CORS middleware - PRODUCTION READY
+	// CORS middleware
 	router.Use(CORSMiddleware())
 
 	// Serve static files
 	router.Static("/uploads", "./uploads")
 
+	// Initialize subscription controller
+	subscriptionController := controllers.NewSubscriptionController(db)
+
 	// Setup all routes
-	setupRoutes(router)
+	setupRoutes(router, subscriptionController)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -44,13 +51,14 @@ func main() {
 	log.Printf("📝 API Endpoints:")
 	log.Printf("   POST   http://localhost:%s/auth/register", port)
 	log.Printf("   POST   http://localhost:%s/auth/login", port)
+	log.Printf("   POST   http://localhost:%s/api/subscribe", port)
 
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }
 
-func setupRoutes(router *gin.Engine) {
+func setupRoutes(router *gin.Engine, subscriptionController *controllers.SubscriptionController) {
 	// Health check
 	router.GET("/", func(c *gin.Context) {
 		c.JSON(200, gin.H{
@@ -67,10 +75,10 @@ func setupRoutes(router *gin.Engine) {
 	// Setup routes
 	routes.AuthRoutes(router)
 	routes.AdminRoutes(router)
+	routes.SubscriptionRoutes(router, subscriptionController)
 }
 
 // PRODUCTION CORS Middleware
-// SIMPLE WORKING CORS Middleware
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// ALWAYS allow all origins for now
@@ -89,6 +97,3 @@ func CORSMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
-
-// Add regexp import at the top
-// import "regexp"

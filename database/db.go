@@ -18,6 +18,8 @@ var UserCollection *mongo.Collection
 var SubscriptionCollection *mongo.Collection
 var SubscriptionPlanCollection *mongo.Collection
 
+const DatabaseName = "Inventory"
+
 func ConnectDB() {
 	fmt.Println("🟢 Running ConnectDB()...")
 
@@ -203,6 +205,14 @@ func initializeDefaultPlans(ctx context.Context) {
 	} else {
 		fmt.Println("✅ Default subscription plans created")
 	}
+}
+
+// GetDB returns the database instance
+func GetDB() *mongo.Database {
+	if Client == nil {
+		return nil
+	}
+	return Client.Database("Inventory")
 }
 
 // Add a disconnect function for graceful shutdown

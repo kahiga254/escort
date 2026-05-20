@@ -107,24 +107,17 @@ func (m *MpesaService) GetAccessToken() (string, error) {
 	return m.accessToken, nil
 }
 
-// formatPhoneNumber converts Kenyan phone numbers to MPESA format
-// Converts: 0712345678 → 254712345678
 func formatPhoneNumber(phone string) string {
-	// Remove any spaces or dashes
+	phone = strings.ReplaceAll(phone, "+", "")
 	phone = strings.ReplaceAll(phone, " ", "")
 	phone = strings.ReplaceAll(phone, "-", "")
 
-	// If starts with 0, replace with 254
-	if len(phone) == 10 && phone[0] == '0' {
-		return "254" + phone[1:]
+	// Convert 07xx or 01xx to 2547xx or 2541xx
+	if strings.HasPrefix(phone, "0") {
+		phone = "254" + phone[1:]
 	}
 
-	// If starts with +254, remove the +
-	if len(phone) == 13 && phone[:4] == "+254" {
-		return phone[1:]
-	}
-
-	// Return as-is (assuming already in 254 format)
+	// If already 254xxx, leave as is
 	return phone
 }
 
@@ -172,17 +165,17 @@ func (m *MpesaService) InitiateSTKPush(
 
 	// 5. Create STK Push request body
 	requestBody := map[string]interface{}{
-		"BusinessShortCode": m.shortCode,             // Your business number
-		"Password":          password,                // Generated password
-		"Timestamp":         timestamp,               // Current timestamp
-		"TransactionType":   "CustomerPayBillOnline", // Type of transaction
-		"Amount":            amount,                  // Amount to pay
-		"PartyA":            formattedPhone,          // Customer's phone
-		"PartyB":            m.shortCode,             // Business number (receiver)
-		"PhoneNumber":       formattedPhone,          // Customer's phone again
-		"CallBackURL":       m.callbackURL,           // Where MPESA sends confirmation
-		"AccountReference":  accountReference,        // Your reference (e.g., "SUB-abc123")
-		"TransactionDesc":   transactionDesc,         // Description shown to customer
+		"BusinessShortCode": m.shortCode,              // Your business number
+		"Password":          password,                 // Generated password
+		"Timestamp":         timestamp,                // Current timestamp
+		"TransactionType":   "CustomerBuyGoodsOnline", // Type of transaction
+		"Amount":            amount,                   // Amount to pay
+		"PartyA":            formattedPhone,           // Customer's phone
+		"PartyB":            m.shortCode,              // Business number (receiver)
+		"PhoneNumber":       formattedPhone,           // Customer's phone again
+		"CallBackURL":       m.callbackURL,            // Where MPESA sends confirmation
+		"AccountReference":  accountReference,         // Your reference (e.g., "SUB-abc123")
+		"TransactionDesc":   transactionDesc,          // Description shown to customer
 	}
 
 	// 6. Convert to JSON
