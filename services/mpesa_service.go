@@ -16,6 +16,7 @@ import (
 type MpesaService struct {
 	consumerKey    string
 	consumerSecret string
+	storeNumber    string
 	shortCode      string    // Business till number (174379 for sandbox)
 	passKey        string    // Unique passkey from Safaricom
 	callbackURL    string    // Where MPESA sends payment confirmation
@@ -32,6 +33,7 @@ func NewMpesaService() *MpesaService {
 		consumerSecret: os.Getenv("MPESA_CONSUMER_SECRET"),
 		shortCode:      os.Getenv("MPESA_SHORTCODE"),
 		passKey:        os.Getenv("MPESA_PASSKEY"),
+		storeNumber:    os.Getenv("MPESA_STORE_NUMBER"),
 		callbackURL:    os.Getenv("MPESA_CALLBACK_URL"),
 		environment:    os.Getenv("MPESA_ENVIRONMENT"),
 	}
@@ -171,7 +173,7 @@ func (m *MpesaService) InitiateSTKPush(
 		"TransactionType":   "CustomerBuyGoodsOnline", // Type of transaction
 		"Amount":            amount,                   // Amount to pay
 		"PartyA":            formattedPhone,           // Customer's phone
-		"PartyB":            m.shortCode,              // Business number (receiver)
+		"PartyB":            m.storeNumber,            // Business number (receiver)
 		"PhoneNumber":       formattedPhone,           // Customer's phone again
 		"CallBackURL":       m.callbackURL,            // Where MPESA sends confirmation
 		"AccountReference":  accountReference,         // Your reference (e.g., "SUB-abc123")
