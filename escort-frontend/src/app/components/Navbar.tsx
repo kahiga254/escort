@@ -80,14 +80,14 @@ export default function Navbar() {
           {/* ✅ FIX: Logo scales down on mobile — was fixed w-48 causing overflow */}
           <div className="flex items-center flex-shrink-0">
             <Link href="/" className="flex items-center group">
-              <div className="relative w-28 h-10 sm:w-40 sm:h-14 md:w-48 md:h-16 lg:w-56 lg:h-20 transition-all duration-300 group-hover:scale-105">
+              <div className="relative w-208 h-200 sm:w-40 sm:h-14 md:w-48 md:h-16 lg:w-56 lg:h-20 transition-all duration-300 group-hover:scale-105">
                 <Image
                   src="/Logo.png"
                   alt="Nairobi Escorts Logo"
                   fill
                   className="object-contain"
                   priority
-                  sizes="(max-width: 640px) 112px, (max-width: 768px) 160px, (max-width: 1024px) 192px, 224px"
+                  sizes="(max-width: 700px) 200px, (max-width: 768px) 200px, (max-width: 1024px) 200px, 224px"
                 />
               </div>
               <span className="ml-3 text-xl md:text-2xl lg:text-3xl font-bold text-red-700 hidden lg:inline tracking-tight">

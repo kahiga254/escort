@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from 'next/font/google';
 import Navbar from "./components/Navbar";
-import "./globals.css";
+import AgeVerificationModal from "./components/AgeVerificationModal";
+import "./global.css";
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -31,7 +32,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        {/* ✅ CRITICAL FIX: Viewport meta tag for mobile responsiveness */}
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -41,8 +41,8 @@ export default function RootLayout({
       </head>
       <body className={`${inter.className} overflow-x-hidden`}>
         <Navbar />
-        {/* ✅ FIX: Prevent horizontal overflow on all pages */}
         <main className="w-full overflow-x-hidden">{children}</main>
+        <AgeVerificationModal />
       </body>
     </html>
   );
