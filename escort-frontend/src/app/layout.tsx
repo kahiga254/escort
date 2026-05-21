@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from 'next/font/google';
 import Navbar from "./components/Navbar";
 import AgeVerificationModal from "./components/AgeVerificationModal";
+import InactivityLogout from "./components/InactivityLogout";
 import "./global.css";
 
 const inter = Inter({ 
@@ -43,6 +44,7 @@ export default function RootLayout({
         <Navbar />
         <main className="w-full overflow-x-hidden">{children}</main>
         <AgeVerificationModal />
+        <InactivityLogout />
       </body>
     </html>
   );
