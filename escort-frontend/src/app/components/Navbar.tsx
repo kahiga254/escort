@@ -134,6 +134,18 @@ export default function Navbar() {
               }`}></span>
             </Link>
 
+            <Link
+              href="/blog"
+              className={`text-gray-800 hover:text-red-600 font-semibold transition-all duration-300 text-base lg:text-lg relative group ${
+                pathname === '/blog' ? 'text-red-600' : ''
+              }`}
+            >
+              Blog
+              <span className={`absolute -bottom-1 left-0 w-0 h-0.5 bg-red-600 transition-all duration-300 group-hover:w-full ${
+                pathname === '/blog' ? 'w-full' : ''
+              }`}></span>
+            </Link>
+
             {isLoggedIn ? (
               <div className="flex items-center space-x-4 ml-2">
                 <button
@@ -288,6 +300,18 @@ export default function Navbar() {
                 onClick={() => setIsMenuOpen(false)}
               >
                 Service Providers
+              </Link>
+              
+              <Link
+                href="/blog"
+                className={`block px-4 py-3 rounded-xl text-base font-semibold transition-all duration-300 ${
+                  pathname === '/blog'
+                    ? 'bg-red-600 text-white shadow-lg shadow-red-200'
+                    : 'text-gray-800 hover:bg-red-50 hover:text-red-600 border border-transparent hover:border-red-200'
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Blog
               </Link>
 
               {isLoggedIn ? (

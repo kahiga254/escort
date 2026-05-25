@@ -228,3 +228,8 @@ func DisconnectDB() {
 		}
 	}
 }
+
+// GetClient returns the MongoDB client
+func GetClient() *mongo.Client {
+	return Client
+}

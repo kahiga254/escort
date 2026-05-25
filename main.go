@@ -38,6 +38,9 @@ func main() {
 	// Initialize subscription controller
 	subscriptionController := controllers.NewSubscriptionController(db)
 
+	// Initialize blog controller
+	controllers.InitBlogCollection(database.GetClient())
+
 	// Setup all routes
 	setupRoutes(router, subscriptionController)
 
@@ -52,6 +55,8 @@ func main() {
 	log.Printf("   POST   http://localhost:%s/auth/register", port)
 	log.Printf("   POST   http://localhost:%s/auth/login", port)
 	log.Printf("   POST   http://localhost:%s/api/subscribe", port)
+	log.Printf("   GET    http://localhost:%s/api/blogs", port)
+	log.Printf("   POST   http://localhost:%s/api/blogs", port)
 
 	if err := router.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)
@@ -76,6 +81,7 @@ func setupRoutes(router *gin.Engine, subscriptionController *controllers.Subscri
 	routes.AuthRoutes(router)
 	routes.AdminRoutes(router)
 	routes.SubscriptionRoutes(router, subscriptionController)
+	routes.BlogRoutes(router) // Add blog routes
 }
 
 // PRODUCTION CORS Middleware
