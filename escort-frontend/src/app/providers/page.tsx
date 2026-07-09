@@ -132,15 +132,19 @@ export default function Providers() {
                 Showing <span className="font-bold text-red-600">{filteredProviders.length}</span> verified provider{filteredProviders.length !== 1 ? 's' : ''}
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {filteredProviders.map((provider) => (
+                {filteredProviders.map((provider, index) => (
                   <Link key={provider.id} href={`/provider/${provider.id}`} className="group">
                     <div className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 h-full flex flex-col">
-                      <div className="relative w-full h-64 bg-gray-200 overflow-hidden flex items-center justify-center">
+                      {/* Image container with Next.js Image optimization */}
+                      <div className="relative w-full h-64 bg-gray-200 overflow-hidden">
                         {provider.image_url ? (
-                          <img
+                          <Image
                             src={provider.image_url}
                             alt={provider.full_name}
-                            className="w-full h-full object-contain transition-opacity duration-500"
+                            fill
+                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                            className="object-contain"
+                            priority={index < 3}
                           />
                         ) : (
                           <div className="w-full h-full bg-gradient-to-br from-red-200 to-red-300 flex items-center justify-center">

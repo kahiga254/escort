@@ -7,18 +7,15 @@ export default function AgeVerificationModal() {
   const [hasVerified, setHasVerified] = useState(false);
 
   useEffect(() => {
-    const verified = sessionStorage.getItem('ageVerified');
-    if (verified) {
-      setHasVerified(true);
-      return;
-    }
+  const verified = sessionStorage.getItem('ageVerified');
+  if (verified) {
+    setHasVerified(true);
+    return;
+  }
 
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, []);
+  
+  setIsVisible(true);
+}, []);
 
   const handleConfirm = (isOver18: boolean) => {
     if (isOver18) {

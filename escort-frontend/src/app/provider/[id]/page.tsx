@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Image from 'next/image';
-import Link from 'next/link';
+
 
 interface Provider {
   _id: string;
@@ -210,11 +209,11 @@ export default function ProviderProfilePage() {
                 <div className="md:w-48 md:h-48 w-full h-64 rounded-xl overflow-hidden bg-gradient-to-br from-purple-100 to-pink-100">
                   {mainImage ? (
                     <img
-                      src={mainImage}
-                      alt={provider.full_name}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
+                    src={mainImage}
+                    alt={provider.full_name}
+                    className="w-full h-full object-cover"
+                  />
+                    ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="text-5xl font-bold text-purple-300">
                         {provider.full_name?.charAt(0) || 'P'}
@@ -277,20 +276,20 @@ export default function ProviderProfilePage() {
                   <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-2">
                     {allImages.map((image, index) => (
                       <button
-                        key={index}
-                        onClick={() => setSelectedImageIndex(index)}
-                        className={`aspect-square rounded-lg overflow-hidden border-2 ${
-                          selectedImageIndex === index 
-                            ? 'border-purple-500' 
-                            : 'border-transparent hover:border-gray-300'
-                        }`}
-                      >
-                        <img
-                          src={image}
-                          alt={`${provider.full_name} - Photo ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </button>
+                          key={index}
+                          onClick={() => setSelectedImageIndex(index)}
+                          className={`rounded-lg overflow-hidden border-2 w-24 h-24 ${
+                            selectedImageIndex === index 
+                              ? 'border-purple-500' 
+                              : 'border-transparent hover:border-gray-300'
+                          }`}
+                        >
+                          <img
+                            src={image}
+                            alt={`${provider.full_name} - Photo ${index + 1}`}
+                            className="object-cover w-full h-full"
+                          />
+                        </button>
                     ))}
                   </div>
                 </div>

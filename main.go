@@ -82,6 +82,7 @@ func setupRoutes(router *gin.Engine, subscriptionController *controllers.Subscri
 	routes.AdminRoutes(router)
 	routes.SubscriptionRoutes(router, subscriptionController)
 	routes.BlogRoutes(router) // Add blog routes
+	routes.TelegramRoutes(router)
 }
 
 // PRODUCTION CORS Middleware

@@ -32,8 +32,12 @@ type User struct {
 	CreatedAt          time.Time `bson:"created_at" json:"created_at,omitempty"`
 	UpdatedAt          time.Time `bson:"updated_at" json:"updated_at,omitempty"`
 
-	
+	// ADD THESE TWO LINES:
+	Advertised   bool      `bson:"advertised" json:"advertised"` // Has been posted to Telegram
+	AdvertisedAt time.Time `bson:"advertised_at,omitempty" json:"advertised_at,omitempty"` // When it was advertised
 }
+
+
 
 // MinimalPUserResponse - Only fields needed for homepage
 type MinimalUserResponse struct {

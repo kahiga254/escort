@@ -4,11 +4,13 @@ import Navbar from "./components/Navbar";
 import AgeVerificationModal from "./components/AgeVerificationModal";
 import InactivityLogout from "./components/InactivityLogout";
 import { organizationSchema } from "./schema";
+import Script from "next/script";
 import "./global.css";
 
 const inter = Inter({ 
   subsets: ['latin'],
   variable: '--font-inter',
+  display: 'swap',
 });
 
 export const metadata: Metadata = {
@@ -57,7 +59,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
         <meta name="keywords" content="escorts, Nairobi, companions, professional escorts, vip escorts, high-class escorts, call girls, elite escorts, discreet companionship, Nairobi nightlife, escort services, premium escorts, Nairobi social scene" />
         <link rel="canonical" href="https://escorthub254.com" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
@@ -65,12 +67,43 @@ export default function RootLayout({
         <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
         <link rel="manifest" href="/site.webmanifest" />
         <meta name="msapplication-TileColor" content="#7C3AED" />
-       <script
+        
+        {/* Defer CSS loading to avoid render blocking */}
+        <link rel="preload" href="/global.css" as="style" />
+        <link rel="stylesheet" href="/global.css" />
+        
+        {/* Inline critical CSS for above-the-fold content */}
+        <style dangerouslySetInnerHTML={{
+          __html: `
+            body { margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; background-color: #f9fafb; }
+            .navbar { position: sticky; top: 0; z-index: 50; background: white; }
+            .image-placeholder { background: #f3f4f6; aspect-ratio: 1/1; width: 100%; }
+          `
+        }} />
+        
+        <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationSchema) }}
         />
       </head>
       <body className={`${inter.className} overflow-x-hidden`}>
+        {/* Google Analytics */}
+        <Script
+          strategy="afterInteractive"
+          src="https://www.googletagmanager.com/gtag/js?id=G-EG24SPQ2XX"
+        />
+        <Script
+          id="google-analytics"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'G-EG24SPQ2XX');
+            `,
+          }}
+        />
         <Navbar />
         <main className="w-full overflow-x-hidden">{children}</main>
         <AgeVerificationModal />

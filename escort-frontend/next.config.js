@@ -1,8 +1,20 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  images: {
+    unoptimized: true,
+  },
+  swcMinify: true,
+  compress: true,
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
+  // Target modern browsers only - removes legacy JavaScript
+  targets: {
+    chrome: 90,
+    firefox: 88,
+    safari: 14,
+    edge: 90,
+  },
+};
 
-  output: 'standalone', // Enable standalone output for better performance and smaller image size
-}
-
-module.exports = nextConfig
+module.exports = nextConfig;

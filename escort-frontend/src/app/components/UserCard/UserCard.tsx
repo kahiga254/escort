@@ -3,6 +3,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { User } from '@/app/types/user';
 
 interface UserCardProps {
@@ -54,23 +55,20 @@ export default function UserCard({ user }: UserCardProps) {
             {user.image_url && !imgError ? (
               <>
                 {/* Main image with fitting options */}
-                <img
-                  src={user.image_url}
-                  alt={user.full_name}
-                  className={`w-full h-full object-contain transition-transform duration-700 group-hover:scale-105 ${
-                    imageLoaded ? 'opacity-100' : 'opacity-0'
-                  }`}
-                  onLoad={() => setImageLoaded(true)}
-                  onError={() => setImgError(true)}
-                  loading="lazy"
-                  decoding="async"
-                  style={{
-                    maxWidth: '100%',
-                    maxHeight: '100%',
-                    margin: '0 auto', // Center the image
-                    display: 'block'
-                  }}
-                />
+                <Image
+                    src={user.image_url}
+                    alt={user.full_name}
+                    fill
+                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    className={`object-contain transition-transform duration-700 group-hover:scale-105 ${
+                      imageLoaded ? 'opacity-100' : 'opacity-0'
+                    }`}
+                    onLoadingComplete={() => setImageLoaded(true)}
+                    onError={() => setImgError(true)}
+                    loading="lazy"
+                    quality={75}
+                    priority={false}
+                  />
                 
                 {/* Loading skeleton */}
                 {!imageLoaded && (
