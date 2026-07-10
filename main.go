@@ -85,14 +85,22 @@ func setupRoutes(router *gin.Engine, subscriptionController *controllers.Subscri
 	routes.TelegramRoutes(router)
 }
 
+
 // PRODUCTION CORS Middleware
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Allow both www and non-www versions
+		// Allow both www and non-www versions (browser requests)
 		if origin == "https://escorthub254.com" || origin == "https://www.escorthub254.com" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		}
+
+		// Allow server-to-server requests (from bot/backend)
+		// These requests don't have an Origin header
+		if origin == "" {
+			// Allow telegram bot requests
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
